@@ -324,6 +324,22 @@ ApplicationWindow {
                     Rectangle { width: 1; Layout.fillHeight: true; color: window.border }
 
                     ColumnLayout {
+                        Layout.preferredWidth: 150
+                        LabelSmall { text: "AUDIO" }
+                        Text {
+                            text: appController.audioSummary
+                            // Amber when a source was dropped: a missing track is easy to not notice
+                            // until you are editing, which is far too late.
+                            color: appController.audioNotice.length > 0 ? "#f2b84b" : window.text
+                            font.pixelSize: 13
+                            elide: Text.ElideRight
+                            Layout.fillWidth: true
+                        }
+                    }
+
+                    Rectangle { width: 1; Layout.fillHeight: true; color: window.border }
+
+                    ColumnLayout {
                         Layout.fillWidth: true
                         LabelSmall { text: "OUTPUT" }
                         Text { text: appController.outputDirectory; color: window.text; font.pixelSize: 13; elide: Text.ElideMiddle; Layout.fillWidth: true }
@@ -384,6 +400,16 @@ ApplicationWindow {
                     }
                 }
             }
+        }
+
+        Rectangle {
+            visible: appController.audioNotice.length > 0
+            Layout.fillWidth: true
+            Layout.preferredHeight: visible ? 42 : 0
+            radius: 7
+            color: "#2a2519"
+            border.color: "#6b5a2a"
+            Text { anchors.fill: parent; anchors.margins: 12; text: appController.audioNotice; color: "#f2d89b"; font.pixelSize: 12; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter }
         }
 
         Rectangle {

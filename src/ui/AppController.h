@@ -30,6 +30,8 @@ class AppController final : public QObject {
     Q_PROPERTY(QStringList setupSteps READ setupSteps NOTIFY setupChanged)
     Q_PROPERTY(QString setupCommand READ setupCommand NOTIFY setupChanged)
     Q_PROPERTY(bool secureBootEnabled READ secureBootEnabled NOTIFY setupChanged)
+    Q_PROPERTY(QString audioSummary READ audioSummary NOTIFY capturingChanged)
+    Q_PROPERTY(QString audioNotice READ audioNotice NOTIFY capturingChanged)
 
 public:
     explicit AppController(QObject *parent = nullptr);
@@ -57,6 +59,12 @@ public:
     [[nodiscard]] QStringList setupSteps() const;
     [[nodiscard]] QString setupCommand() const;
     [[nodiscard]] bool secureBootEnabled() const;
+
+    //! Which audio tracks are being recorded, e.g. "mix + game + mic".
+    [[nodiscard]] QString audioSummary() const;
+
+    //! Why a source is missing, so a silent track is never a silent surprise.
+    [[nodiscard]] QString audioNotice() const;
 
     Q_INVOKABLE void initialize(QObject *previewItem);
     Q_INVOKABLE void toggleRecording();

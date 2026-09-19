@@ -6,6 +6,8 @@
 #include <QTemporaryDir>
 #include <QTest>
 
+#include <gst/gst.h>
+
 using quadcap::pipeline::CapturePipeline;
 using quadcap::pipeline::PipelineConfig;
 
@@ -56,6 +58,59 @@ private slots:
         QTest::qWait(2500);
         pipeline.stopRecording();
         QTRY_VERIFY_WITH_TIMEOUT(!pipeline.isRecording(), 5000);
+        pipeline.stop();
+
+        QCOMPARE(errors.count(), 0);
+        QVERIFY(QFileInfo(recording).size() > 1024);
+    }
+
+    void refusesAnAudioDeviceItCannotOpen()
+    {
+        // An ALSA card index nothing is plugged into: the element builds, but the device does not
+        // open. Catching that here is what keeps it out of the graph.
+        GstElement *absent = gst_element_factory_make("alsasrc", nullptr);
+        QVERIFY(absent != nullptr);
+        g_object_set(absent, "device", "hw:99,0", nullptr);
+        QVERIFY2(!CapturePipeline::canOpenSource(absent),
+            "a device that cannot be opened must not pass the probe");
+        gst_object_unref(absent);
+
+        // A source with no device to claim reaches READY, so the probe must not reject everything.
+        GstElement *tone = gst_element_factory_make("audiotestsrc", nullptr);
+        QVERIFY(tone != nullptr);
+        QVERIFY2(CapturePipeline::canOpenSource(tone), "a working source must pass the probe");
+        gst_object_unref(tone);
+    }
+
+    void capturesVideoWhenTheAudioDeviceIsUnavailable()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+
+        CapturePipeline pipeline;
+        QSignalSpy errors(&pipeline, &CapturePipeline::errorOccurred);
+        PipelineConfig config;
+        config.testSource = true;
+        config.hardwareEncoder = false;
+        config.width = 320;
+        config.height = 180;
+        config.frameRate = 30;
+        config.segmentSeconds = 1;
+        config.ringMinutes = 1;
+        config.ringDirectory = temporary.filePath(QStringLiteral("ring"));
+        config.gameAudioDevice = QStringLiteral("test");
+        config.captureMic = true;
+
+        QString error;
+        QVERIFY2(pipeline.start(config, &error), qPrintable(error));
+
+        // Losing a microphone must never cost the recording; video keeps running either way.
+        const auto recording = temporary.filePath(QStringLiteral("degraded.mkv"));
+        QVERIFY2(pipeline.startRecording(recording, &error), qPrintable(error));
+        QTest::qWait(2000);
+        pipeline.stopRecording();
+        QTRY_VERIFY_WITH_TIMEOUT(!pipeline.isRecording(), 5000);
+        QVERIFY(pipeline.isRunning());
         pipeline.stop();
 
         QCOMPARE(errors.count(), 0);

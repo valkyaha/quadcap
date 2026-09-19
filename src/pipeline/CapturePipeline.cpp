@@ -73,14 +73,41 @@ bool CapturePipeline::start(const PipelineConfig &config, QString *error)
         return false;
     }
 
-    const auto result = gst_element_set_state(pipeline_, GST_STATE_PLAYING);
-    if (result == GST_STATE_CHANGE_FAILURE) {
+    if (gst_element_set_state(pipeline_, GST_STATE_PLAYING) != GST_STATE_CHANGE_FAILURE) {
+        busTimer_.start();
+        return true;
+    }
+
+    /*
+     * Starting failed. Audio sources are probed before being wired in, so most device problems are
+     * already handled — but a device can be taken between that probe and this state change, and an
+     * audio element can fail for reasons a probe does not reach. Rather than hand back nothing,
+     * rebuild without audio and try once more: a recording with no sound is recoverable, a missing
+     * recording is not.
+     */
+    destroyPipeline();
+    if (!config_.enableAudio) {
         if (error) {
             *error = QStringLiteral("GStreamer refused to start the pipeline");
+        }
+        return false;
+    }
+
+    config_.enableAudio = false;
+    if (!build(error)) {
+        destroyPipeline();
+        return false;
+    }
+    if (gst_element_set_state(pipeline_, GST_STATE_PLAYING) == GST_STATE_CHANGE_FAILURE) {
+        if (error) {
+            *error = QStringLiteral("GStreamer refused to start the pipeline, with and without audio");
         }
         destroyPipeline();
         return false;
     }
+
+    audioNotice_ = QStringLiteral("Recording without audio: the sound devices could not be started");
+    emit warningOccurred(audioNotice_);
     busTimer_.start();
     return true;
 }
@@ -575,6 +602,25 @@ bool CapturePipeline::build(QString *error)
     return true;
 }
 
+bool CapturePipeline::canOpenSource(GstElement *element)
+{
+    if (!element) {
+        return false;
+    }
+    // READY is where a capture element actually claims its device, so this is the cheapest point at
+    // which "busy" or "missing" becomes visible. Returned to NULL either way so the caller is free
+    // to wire it in or throw it away.
+    const auto result = gst_element_set_state(element, GST_STATE_READY);
+    const bool opened = result != GST_STATE_CHANGE_FAILURE;
+    gst_element_set_state(element, GST_STATE_NULL);
+    return opened;
+}
+
+QString CapturePipeline::audioNotice() const
+{
+    return audioNotice_;
+}
+
 QStringList CapturePipeline::audioTrackNames() const
 {
     QStringList names;
@@ -630,6 +676,7 @@ GstElement *CapturePipeline::buildAudioSource(GstElement *source, const char *la
 bool CapturePipeline::buildAudio(GstElement *ringSink, QString *error)
 {
     audioTracks_.clear();
+    audioNotice_.clear();
     if (!config_.enableAudio) {
         return true;
     }
@@ -652,8 +699,15 @@ bool CapturePipeline::buildAudio(GstElement *ringSink, QString *error)
             if (g_object_class_find_property(G_OBJECT_GET_CLASS(source), "provide-clock")) {
                 g_object_set(source, "provide-clock", FALSE, nullptr);
             }
-            gst_bin_add(GST_BIN(pipeline_), source);
-            gameTee = buildAudioSource(source, "game");
+            if (canOpenSource(source)) {
+                gst_bin_add(GST_BIN(pipeline_), source);
+                gameTee = buildAudioSource(source, "game");
+            } else {
+                gst_object_unref(source);
+                audioNotice_ = QStringLiteral("Console audio unavailable (%1 could not be opened; "
+                                              "another program may be using it)")
+                                   .arg(config_.gameAudioDevice);
+            }
         }
     }
 
@@ -670,8 +724,15 @@ bool CapturePipeline::buildAudio(GstElement *ringSink, QString *error)
             if (g_object_class_find_property(G_OBJECT_GET_CLASS(source), "provide-clock")) {
                 g_object_set(source, "provide-clock", FALSE, nullptr);
             }
-            gst_bin_add(GST_BIN(pipeline_), source);
-            micTee = buildAudioSource(source, "mic");
+            if (canOpenSource(source)) {
+                gst_bin_add(GST_BIN(pipeline_), source);
+                micTee = buildAudioSource(source, "mic");
+            } else {
+                gst_object_unref(source);
+                const auto note = QStringLiteral("Microphone unavailable");
+                audioNotice_ = audioNotice_.isEmpty() ? note
+                                                      : audioNotice_ + QStringLiteral("; ") + note;
+            }
         }
     }
 

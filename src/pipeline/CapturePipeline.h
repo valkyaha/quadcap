@@ -67,6 +67,18 @@ public:
     //! Names of the audio tracks currently being muxed, in track order. Empty when audio is off.
     [[nodiscard]] QStringList audioTrackNames() const;
 
+    //! Why an audio source was left out, for the UI to show. Empty when everything was captured.
+    [[nodiscard]] QString audioNotice() const;
+
+    /*!
+     * True when \a element reaches READY, which for a capture source means its device opened.
+     *
+     * A busy or absent sound device only reports itself when the element is activated. Probing it
+     * before wiring it into the graph is what lets a missing microphone be left out rather than
+     * taking the whole pipeline — and the video with it — down at PLAYING.
+     */
+    [[nodiscard]] static bool canOpenSource(GstElement *element);
+
 signals:
     void errorOccurred(const QString &message);
     void warningOccurred(const QString &message);
@@ -116,6 +128,7 @@ private:
     GstElement *recordSink_ = nullptr;
     GstPad *recordTeePad_ = nullptr;
     QVector<AudioTrack> audioTracks_;
+    QString audioNotice_;
     QVector<GstElement *> recordAudioQueues_;
     QVector<GstPad *> recordAudioTeePads_;
     QString recordingPath_;

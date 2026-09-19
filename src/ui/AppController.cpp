@@ -206,6 +206,20 @@ bool AppController::secureBootEnabled() const
     return setup_.secureBootEnabled;
 }
 
+QString AppController::audioSummary() const
+{
+    const auto tracks = pipeline_.audioTrackNames();
+    if (tracks.isEmpty()) {
+        return QStringLiteral("No audio");
+    }
+    return tracks.join(QStringLiteral(" + "));
+}
+
+QString AppController::audioNotice() const
+{
+    return pipeline_.audioNotice();
+}
+
 void AppController::initialize(QObject *previewItem)
 {
     if (initialized_) {
