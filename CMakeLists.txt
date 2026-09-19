@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(quadcap VERSION 0.3.1 LANGUAGES CXX)
+project(quadcap VERSION 0.3.2 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -35,6 +35,8 @@ add_library(quadcap_pipeline
     src/pipeline/CapturePipeline.h
     src/pipeline/ObsVideoOutput.cpp
     src/pipeline/ObsVideoOutput.h
+    src/pipeline/ObsAudioOutput.cpp
+    src/pipeline/ObsAudioOutput.h
 )
 target_include_directories(quadcap_pipeline PUBLIC src)
 target_link_libraries(quadcap_pipeline PUBLIC Qt6::Core PkgConfig::GSTREAMER)

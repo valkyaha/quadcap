@@ -493,7 +493,20 @@ bool AppController::applyEdidSource() {
 void AppController::applyObsOutput() {
     if (!obsEnabled_) {
         obsOutput_.stop();
+        obsGameOutput_.stop();
+        obsMicOutput_.stop();
         return;
+    }
+
+    // Brought up here rather than with the capture graph so a sink that stalls acquiring its ring
+    // buffer cannot stall the graph, which is what froze the window.
+    // A missing sink is reported through obsNotice once a pipeline is built, not as an error here:
+    // the sinks appear only after the installer has run and the session has been restarted.
+    if (!obsGameOutput_.isRunning()) {
+        (void)obsGameOutput_.start(QStringLiteral("quadcap-game"));
+    }
+    if (!obsMicOutput_.isRunning()) {
+        (void)obsMicOutput_.start(QStringLiteral("quadcap-mic"));
     }
     if (obsOutput_.isRunning()) {
         return;
@@ -551,8 +564,8 @@ void AppController::startPipeline() {
     config.enableObsOutput = obsEnabled_;
     if (obsEnabled_) {
         config.obsOutput = &obsOutput_;
-        config.obsGameSink = QStringLiteral("quadcap-game");
-        config.obsMicSink = QStringLiteral("quadcap-mic");
+        config.obsGameOutput = &obsGameOutput_;
+        config.obsMicOutput = &obsMicOutput_;
     }
 
     // The pipeline starts a fresh ring, so anything recorded about the previous one is stale.

@@ -7,6 +7,7 @@
 #include <QTimer>
 #include <QVector>
 
+#include "pipeline/ObsAudioOutput.h"
 #include "pipeline/ObsVideoOutput.h"
 
 #include <gst/gst.h>
@@ -50,9 +51,15 @@ struct PipelineConfig {
      * video leg out.
      */
     ObsVideoOutput *obsOutput = nullptr;
-    //! PipeWire sink carrying console audio. OBS captures its monitor. Empty leaves it out.
-    QString obsGameSink;
-    QString obsMicSink;
+    /*!
+     * Where each audio source goes for OBS to read.
+     *
+     * Objects rather than sink names, for the same reason as the video: an audio sink acquires a
+     * ring buffer on its way to PAUSED and that can block, which inside this graph meant blocking
+     * the state change the UI thread is waiting on. Null leaves that source out.
+     */
+    ObsAudioOutput *obsGameOutput = nullptr;
+    ObsAudioOutput *obsMicOutput = nullptr;
 };
 
 /*!
@@ -162,8 +169,8 @@ class CapturePipeline final : public QObject {
      */
     void buildObsVideo(GstElement *rawTee);
 
-    //! Sends one audio source to its own OBS sink. Never fatal, for the same reason.
-    void attachObsAudio(GstElement *tee, const QString &sink, const char *label);
+    //! Taps one audio source for its OBS output. Never fatal, for the same reason.
+    void attachObsAudio(GstElement *tee, ObsAudioOutput *output, const char *label);
 
     //! Adds \a note to obsNotice_, keeping any note already there.
     void noteObsProblem(const QString &note);

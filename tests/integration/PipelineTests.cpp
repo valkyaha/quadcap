@@ -216,8 +216,8 @@ class PipelineTests final : public QObject {
         // the PipeWire sinks exist, is the common case, and it must cost them nothing. A null
         // output stands in for a loopback node that was never opened.
         config.obsOutput = nullptr;
-        config.obsGameSink = QStringLiteral("quadcap-game-absent");
-        config.obsMicSink = QStringLiteral("quadcap-mic-absent");
+        config.obsGameOutput = nullptr;
+        config.obsMicOutput = nullptr;
 
         QString error;
         QVERIFY2(pipeline.start(config, &error), qPrintable(error));

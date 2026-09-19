@@ -797,13 +797,12 @@ void CapturePipeline::buildObsVideo(GstElement *rawTee) {
     obsVideoLive_ = true;
 }
 
-void CapturePipeline::attachObsAudio(GstElement *tee, const QString &sink, const char *label) {
-    if (!tee || sink.isEmpty()) {
+void CapturePipeline::attachObsAudio(GstElement *tee, ObsAudioOutput *output, const char *label) {
+    if (!tee || !output) {
         return;
     }
-    if (!audioSinkExists(sink)) {
-        noteObsProblem(
-            QStringLiteral("OBS sink %1 does not exist; run the installer to create it").arg(sink));
+    if (!output->isRunning()) {
+        noteObsProblem(QStringLiteral("OBS %1 sink is not available").arg(QLatin1String(label)));
         return;
     }
 
@@ -815,40 +814,45 @@ void CapturePipeline::attachObsAudio(GstElement *tee, const QString &sink, const
     GstElement *queue = makeLeakyQueue(named("queue").constData());
     GstElement *convert = gst_element_factory_make("audioconvert", named("convert").constData());
     GstElement *resample = gst_element_factory_make("audioresample", named("resample").constData());
-    GstElement *output = gst_element_factory_make("pulsesink", named("sink").constData());
-    if (!queue || !convert || !resample || !output) {
+    GstElement *caps = gst_element_factory_make("capsfilter", named("caps").constData());
+    GstElement *sink = gst_element_factory_make("appsink", named("sink").constData());
+    if (!queue || !convert || !resample || !caps || !sink) {
         gst_clear_object(&queue);
         gst_clear_object(&convert);
         gst_clear_object(&resample);
-        gst_clear_object(&output);
+        gst_clear_object(&caps);
+        gst_clear_object(&sink);
         noteObsProblem(
             QStringLiteral("Could not build the OBS %1 audio branch").arg(QLatin1String(label)));
         return;
     }
 
-    const auto device = sink.toUtf8();
-    g_object_set(output, "device", device.constData(), nullptr);
-    // The capture clock stays master. A sink that offers its own would pull the whole graph onto
-    // the sound server's rate and reintroduce the drift the recording path avoids.
-    if (g_object_class_find_property(G_OBJECT_GET_CLASS(output), "provide-clock")) {
-        g_object_set(output, "provide-clock", FALSE, nullptr);
-    }
+    GstCaps *wanted = gst_caps_from_string(ObsAudioOutput::requiredCaps().toLatin1().constData());
+    g_object_set(caps, "caps", wanted, nullptr);
+    gst_caps_unref(wanted);
+    g_object_set(sink, "emit-signals", FALSE, "sync", FALSE, "max-buffers", 4u, "drop", TRUE,
+                 nullptr);
 
-    if (!canOpenSource(output)) {
-        gst_object_unref(queue);
-        gst_object_unref(convert);
-        gst_object_unref(resample);
-        gst_object_unref(output);
-        noteObsProblem(QStringLiteral("OBS sink %1 is not available").arg(sink));
-        return;
-    }
-
-    gst_bin_add_many(GST_BIN(pipeline_), queue, convert, resample, output, nullptr);
-    if (!linkAll({tee, queue, convert, resample, output})) {
+    gst_bin_add_many(GST_BIN(pipeline_), queue, convert, resample, caps, sink, nullptr);
+    if (!linkAll({tee, queue, convert, resample, caps, sink})) {
         noteObsProblem(
             QStringLiteral("Could not link the OBS %1 audio branch").arg(QLatin1String(label)));
         return;
     }
+
+    GstAppSinkCallbacks callbacks{};
+    callbacks.new_sample = [](GstAppSink *appsink, gpointer userData) -> GstFlowReturn {
+        GstSample *sample = gst_app_sink_pull_sample(appsink);
+        if (!sample) {
+            return GST_FLOW_OK;
+        }
+        if (GstBuffer *buffer = gst_sample_get_buffer(sample)) {
+            static_cast<ObsAudioOutput *>(userData)->submitBuffer(buffer);
+        }
+        gst_sample_unref(sample);
+        return GST_FLOW_OK;
+    };
+    gst_app_sink_set_callbacks(GST_APP_SINK(sink), &callbacks, output, nullptr);
     ++obsAudioLive_;
 }
 
@@ -1002,8 +1006,8 @@ bool CapturePipeline::buildAudio(GstElement *ringSink, QString *error) {
     // Sent per source rather than from the mix, which is the whole point: OBS gets game and
     // microphone as two inputs it can level and filter apart from each other.
     if (config_.enableObsOutput) {
-        attachObsAudio(gameTee, config_.obsGameSink, "game");
-        attachObsAudio(micTee, config_.obsMicSink, "mic");
+        attachObsAudio(gameTee, config_.obsGameOutput, "game");
+        attachObsAudio(micTee, config_.obsMicOutput, "mic");
     }
 
     if (!gameTee && !micTee) {

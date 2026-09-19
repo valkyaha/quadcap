@@ -4,6 +4,7 @@
 #include "device/SystemCheck.h"
 #include "flashback/FlashbackRing.h"
 #include "pipeline/CapturePipeline.h"
+#include "pipeline/ObsAudioOutput.h"
 #include "pipeline/ObsVideoOutput.h"
 
 #include <QObject>
@@ -164,6 +165,9 @@ class AppController final : public QObject {
     quadcap::pipeline::CapturePipeline pipeline_;
     //! Holds the loopback node open for as long as OBS output is on, across pipeline rebuilds.
     quadcap::pipeline::ObsVideoOutput obsOutput_;
+    //! One per source, so OBS receives game and microphone as inputs it can treat separately.
+    quadcap::pipeline::ObsAudioOutput obsGameOutput_;
+    quadcap::pipeline::ObsAudioOutput obsMicOutput_;
     quadcap::flashback::FlashbackRing flashback_;
     quadcap::device::DeviceStatus status_;
     quadcap::device::SetupStatus setup_;

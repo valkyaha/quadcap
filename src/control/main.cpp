@@ -4,6 +4,7 @@
 #include "device/SystemCheck.h"
 #include "obs/ObsScene.h"
 #include "pipeline/CapturePipeline.h"
+#include "pipeline/ObsAudioOutput.h"
 #include "pipeline/ObsVideoOutput.h"
 
 #include <QCommandLineOption>
@@ -102,6 +103,8 @@ int recordForSeconds(const DeviceStatus &status, const QString &path, const int 
     config.enablePreview = false;
     config.gameAudioDevice = quadcap::device::DeviceDiscovery::alsaDeviceForPci(status.pciAddress);
     quadcap::pipeline::ObsVideoOutput obsVideo;
+    quadcap::pipeline::ObsAudioOutput obsGame;
+    quadcap::pipeline::ObsAudioOutput obsMic;
     config.enableObsOutput = obsOutput;
     if (obsOutput) {
         const auto node = quadcap::device::DeviceDiscovery::obsLoopbackDevice();
@@ -110,8 +113,15 @@ int recordForSeconds(const DeviceStatus &status, const QString &path, const int 
             err << "OBS video output unavailable: " << obsError << Qt::endl;
         }
         config.obsOutput = &obsVideo;
-        config.obsGameSink = QStringLiteral("quadcap-game");
-        config.obsMicSink = QStringLiteral("quadcap-mic");
+        QString obsAudioError;
+        if (!obsGame.start(QStringLiteral("quadcap-game"), &obsAudioError)) {
+            err << "OBS game audio unavailable: " << obsAudioError << Qt::endl;
+        }
+        if (!obsMic.start(QStringLiteral("quadcap-mic"), &obsAudioError)) {
+            err << "OBS microphone audio unavailable: " << obsAudioError << Qt::endl;
+        }
+        config.obsGameOutput = &obsGame;
+        config.obsMicOutput = &obsMic;
     }
 
     QString failure;
