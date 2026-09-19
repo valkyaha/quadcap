@@ -6,6 +6,8 @@
 
 #include <gst/video/video-event.h>
 
+#include <cmath>
+#include <limits>
 #include <mutex>
 
 namespace quadcap::pipeline {
@@ -42,6 +44,35 @@ bool linkAll(std::initializer_list<GstElement *> elements)
         ++next;
     }
     return true;
+}
+
+double loudestChannel(const GstStructure *structure, const char *field)
+{
+    const GValue *channels = gst_structure_get_value(structure, field);
+    if (!channels) {
+        return -std::numeric_limits<double>::infinity();
+    }
+
+    guint count = 0;
+    const GValue *(*at)(const GValue *, guint) = nullptr;
+    if (GST_VALUE_HOLDS_ARRAY(channels)) {
+        count = gst_value_array_get_size(channels);
+        at = gst_value_array_get_value;
+    } else if (GST_VALUE_HOLDS_LIST(channels)) {
+        count = gst_value_list_get_size(channels);
+        at = gst_value_list_get_value;
+    } else {
+        return -std::numeric_limits<double>::infinity();
+    }
+
+    double loudest = -std::numeric_limits<double>::infinity();
+    for (guint i = 0; i < count; ++i) {
+        const GValue *entry = at(channels, i);
+        if (entry && G_VALUE_HOLDS_DOUBLE(entry)) {
+            loudest = qMax(loudest, g_value_get_double(entry));
+        }
+    }
+    return loudest;
 }
 
 } // namespace
@@ -130,7 +161,11 @@ void CapturePipeline::stop()
         destroyRecordingBranch();
     }
     gst_element_send_event(pipeline_, gst_event_new_eos());
-    gst_element_get_state(pipeline_, nullptr, nullptr, 2 * GST_SECOND);
+    GstBus *bus = gst_element_get_bus(pipeline_);
+    GstMessage *terminal = gst_bus_timed_pop_filtered(bus, 5 * GST_SECOND,
+        static_cast<GstMessageType>(GST_MESSAGE_EOS | GST_MESSAGE_ERROR));
+    gst_clear_message(&terminal);
+    gst_object_unref(bus);
     destroyPipeline();
 }
 
@@ -308,6 +343,17 @@ void CapturePipeline::pollBus()
         }
         case GST_MESSAGE_ELEMENT: {
             const GstStructure *structure = gst_message_get_structure(message);
+            if (structure && gst_structure_has_name(structure, "level")) {
+                gchar *elementName = gst_object_get_name(GST_MESSAGE_SRC(message));
+                const QString name = QString::fromUtf8(elementName ? elementName : "");
+                g_free(elementName);
+                const auto source = name.section(QLatin1Char('-'), 0, 0);
+                if (!source.isEmpty()) {
+                    emit audioLevel(source, loudestChannel(structure, "rms"),
+                        loudestChannel(structure, "peak"));
+                }
+                break;
+            }
             if (structure && gst_structure_has_name(structure, "splitmuxsink-fragment-closed")) {
                 const gchar *location = gst_structure_get_string(structure, "location");
                 guint64 duration = 0;
@@ -621,6 +667,30 @@ QString CapturePipeline::audioNotice() const
     return audioNotice_;
 }
 
+void CapturePipeline::setAudioGainDb(const QString &source, const double decibels)
+{
+    pendingGainDb_.insert(source, decibels);
+    const double linear = decibels <= -40.0 ? 0.0 : std::pow(10.0, decibels / 20.0);
+    const double volume = qBound(0.0, linear, 10.0);
+    if (GstElement *gain = mixGain_.value(source)) {
+        g_object_set(gain, "volume", volume, nullptr);
+    }
+    if (source == QLatin1String("game") && monitorGain_) {
+        g_object_set(monitorGain_, "volume", volume, nullptr);
+    }
+}
+
+void CapturePipeline::setAudioMuted(const QString &source, const bool muted)
+{
+    pendingMuted_.insert(source, muted);
+    if (GstElement *gain = mixGain_.value(source)) {
+        g_object_set(gain, "mute", muted ? TRUE : FALSE, nullptr);
+    }
+    if (source == QLatin1String("game") && monitorGain_) {
+        g_object_set(monitorGain_, "mute", muted ? TRUE : FALSE, nullptr);
+    }
+}
+
 QStringList CapturePipeline::audioTrackNames() const
 {
     QStringList names;
@@ -642,12 +712,14 @@ GstElement *CapturePipeline::buildAudioSource(GstElement *source, const char *la
     GstElement *resample = gst_element_factory_make("audioresample", named("resample").constData());
     GstElement *rate = gst_element_factory_make("audiorate", named("rate").constData());
     GstElement *caps = gst_element_factory_make("capsfilter", named("caps").constData());
+    GstElement *meter = gst_element_factory_make("level", named("level").constData());
     GstElement *tee = gst_element_factory_make("tee", named("tee").constData());
-    if (!convert || !resample || !rate || !caps || !tee) {
+    if (!convert || !resample || !rate || !caps || !meter || !tee) {
         gst_clear_object(&convert);
         gst_clear_object(&resample);
         gst_clear_object(&rate);
         gst_clear_object(&caps);
+        gst_clear_object(&meter);
         gst_clear_object(&tee);
         return nullptr;
     }
@@ -666,8 +738,11 @@ GstElement *CapturePipeline::buildAudioSource(GstElement *source, const char *la
     gst_caps_unref(shape);
     g_object_set(rate, "tolerance", static_cast<guint64>(40 * GST_MSECOND), nullptr);
 
-    gst_bin_add_many(GST_BIN(pipeline_), convert, resample, rate, caps, tee, nullptr);
-    if (!linkAll({source, convert, resample, rate, caps, tee})) {
+    g_object_set(meter, "post-messages", TRUE,
+        "interval", static_cast<guint64>(80 * GST_MSECOND), nullptr);
+
+    gst_bin_add_many(GST_BIN(pipeline_), convert, resample, rate, caps, meter, tee, nullptr);
+    if (!linkAll({source, convert, resample, rate, caps, meter, tee})) {
         return nullptr;
     }
     return tee;
@@ -677,6 +752,8 @@ bool CapturePipeline::buildAudio(GstElement *ringSink, QString *error)
 {
     audioTracks_.clear();
     audioNotice_.clear();
+    mixGain_.clear();
+    monitorGain_ = nullptr;
     if (!config_.enableAudio) {
         return true;
     }
@@ -692,7 +769,9 @@ bool CapturePipeline::buildAudio(GstElement *ringSink, QString *error)
                 g_object_set(source, "is-live", TRUE, "freq", 440.0, nullptr);
             } else {
                 const auto device = QFile::encodeName(config_.gameAudioDevice);
-                g_object_set(source, "device", device.constData(), nullptr);
+                g_object_set(source, "device", device.constData(),
+                    "buffer-time", static_cast<gint64>(40'000),
+                    "latency-time", static_cast<gint64>(20'000), nullptr);
             }
             // The video capture clock is the master; audio must not drag the pipeline onto a
             // sound-card clock that runs at its own rate.
@@ -750,13 +829,17 @@ bool CapturePipeline::buildAudio(GstElement *ringSink, QString *error)
         GstElement *mixTee = gst_element_factory_make("tee", "mix-tee");
         GstElement *gameToMix = gst_element_factory_make("queue", "game-to-mix");
         GstElement *micToMix = gst_element_factory_make("queue", "mic-to-mix");
-        if (mixer && mixConvert && mixTee && gameToMix && micToMix) {
+        GstElement *gameGain = gst_element_factory_make("volume", "game-gain");
+        GstElement *micGain = gst_element_factory_make("volume", "mic-gain");
+        if (mixer && mixConvert && mixTee && gameToMix && micToMix && gameGain && micGain) {
             gst_bin_add_many(GST_BIN(pipeline_), mixer, mixConvert, mixTee, gameToMix, micToMix,
-                nullptr);
-            const bool mixed = linkAll({gameTee, gameToMix, mixer})
-                && linkAll({micTee, micToMix, mixer})
+                gameGain, micGain, nullptr);
+            const bool mixed = linkAll({gameTee, gameToMix, gameGain, mixer})
+                && linkAll({micTee, micToMix, micGain, mixer})
                 && linkAll({mixer, mixConvert, mixTee});
             if (mixed) {
+                mixGain_.insert(QStringLiteral("game"), gameGain);
+                mixGain_.insert(QStringLiteral("mic"), micGain);
                 audioTracks_.append({QStringLiteral("mix"), mixTee});
             }
         }
@@ -766,6 +849,52 @@ bool CapturePipeline::buildAudio(GstElement *ringSink, QString *error)
     }
     if (micTee) {
         audioTracks_.append({QStringLiteral("mic"), micTee});
+    }
+
+    if (config_.enableAudioMonitoring && gameTee) {
+        GstElement *queue = gst_element_factory_make("queue", "game-monitor-queue");
+        GstElement *gain = gst_element_factory_make("volume", "game-monitor-gain");
+        GstElement *convert = gst_element_factory_make("audioconvert", "game-monitor-convert");
+        GstElement *resample = gst_element_factory_make("audioresample", "game-monitor-resample");
+        GstElement *sink = gst_element_factory_make(
+            config_.testSource ? "fakesink" : "pipewiresink", "game-monitor-sink");
+        if (queue && gain && convert && resample && sink) {
+            g_object_set(queue, "max-size-time", static_cast<guint64>(50 * GST_MSECOND),
+                "max-size-buffers", 0u, "max-size-bytes", 0u, "leaky", 2, nullptr);
+            if (g_object_class_find_property(G_OBJECT_GET_CLASS(sink), "sync")) {
+                g_object_set(sink, "sync", FALSE, nullptr);
+            }
+            if (g_object_class_find_property(G_OBJECT_GET_CLASS(sink), "async")) {
+                g_object_set(sink, "async", FALSE, nullptr);
+            }
+            gst_bin_add_many(GST_BIN(pipeline_), queue, gain, convert, resample, sink, nullptr);
+            if (linkAll({gameTee, queue, gain, convert, resample, sink})) {
+                monitorGain_ = gain;
+            } else {
+                gst_bin_remove_many(
+                    GST_BIN(pipeline_), queue, gain, convert, resample, sink, nullptr);
+                if (audioNotice_.isEmpty()) {
+                    audioNotice_ = QStringLiteral(
+                        "Console audio is recording, but live monitoring could not start");
+                }
+            }
+        } else {
+            gst_clear_object(&queue);
+            gst_clear_object(&gain);
+            gst_clear_object(&convert);
+            gst_clear_object(&resample);
+            gst_clear_object(&sink);
+            if (audioNotice_.isEmpty()) {
+                audioNotice_ = QStringLiteral("Console audio is recording, but no playback sink is available");
+            }
+        }
+    }
+
+    for (auto it = pendingGainDb_.constBegin(); it != pendingGainDb_.constEnd(); ++it) {
+        setAudioGainDb(it.key(), it.value());
+    }
+    for (auto it = pendingMuted_.constBegin(); it != pendingMuted_.constEnd(); ++it) {
+        setAudioMuted(it.key(), it.value());
     }
 
     // Give the ring the same tracks the recording gets, so a saved flashback is not a silent film.
@@ -835,6 +964,8 @@ void CapturePipeline::destroyPipeline()
     recordSink_ = nullptr;
     recordTeePad_ = nullptr;
     audioTracks_.clear();
+    mixGain_.clear();
+    monitorGain_ = nullptr;
     recordAudioQueues_.clear();
     recordAudioTeePads_.clear();
     recordingPath_.clear();

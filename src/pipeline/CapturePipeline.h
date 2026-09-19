@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <QString>
+#include <QHash>
 #include <QStringList>
 #include <QVector>
 #include <QTimer>
@@ -23,6 +24,7 @@ struct PipelineConfig {
     bool enablePreview = false;
 
     bool enableAudio = true;
+    bool enableAudioMonitoring = false;
     //! ALSA device carrying HDMI audio, e.g. "hw:CARD=MK2,DEV=0". Empty skips game audio.
     QString gameAudioDevice;
     //! PipeWire node for the microphone. Empty uses the default source.
@@ -70,6 +72,9 @@ public:
     //! Why an audio source was left out, for the UI to show. Empty when everything was captured.
     [[nodiscard]] QString audioNotice() const;
 
+    void setAudioGainDb(const QString &source, double decibels);
+    void setAudioMuted(const QString &source, bool muted);
+
     /*!
      * True when \a element reaches READY, which for a capture source means its device opened.
      *
@@ -91,6 +96,8 @@ signals:
      * is complete, because the next fragment is opened while this one is still being flushed.
      */
     void segmentClosed(const QString &path, qint64 durationNs);
+
+    void audioLevel(const QString &source, double rmsDb, double peakDb);
 
 private slots:
     void pollBus();
@@ -129,6 +136,10 @@ private:
     GstPad *recordTeePad_ = nullptr;
     QVector<AudioTrack> audioTracks_;
     QString audioNotice_;
+    QHash<QString, GstElement *> mixGain_;
+    GstElement *monitorGain_ = nullptr;
+    QHash<QString, double> pendingGainDb_;
+    QHash<QString, bool> pendingMuted_;
     QVector<GstElement *> recordAudioQueues_;
     QVector<GstPad *> recordAudioTeePads_;
     QString recordingPath_;
@@ -137,4 +148,3 @@ private:
 };
 
 } // namespace quadcap::pipeline
-

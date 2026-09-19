@@ -37,6 +37,23 @@ AppController::AppController(QObject *parent)
                       .toInt(),
             2));
 
+    gameGainDb_ =
+        qBound(-40.0, settings.value(QStringLiteral("audio/gameGainDb"), 0.0).toDouble(), 12.0);
+    micGainDb_ =
+        qBound(-40.0, settings.value(QStringLiteral("audio/micGainDb"), 0.0).toDouble(), 12.0);
+    gameMuted_ = settings.value(QStringLiteral("audio/gameMuted"), false).toBool();
+    micMuted_ = settings.value(QStringLiteral("audio/micMuted"), false).toBool();
+
+    connect(&pipeline_, &quadcap::pipeline::CapturePipeline::audioLevel,
+        this, &AppController::noteAudioLevel);
+    meterTimer_.setInterval(60);
+    connect(&meterTimer_, &QTimer::timeout, this, [this] {
+        gameLevel_ = qMax(0.0, gameLevel_ - 0.06);
+        micLevel_ = qMax(0.0, micLevel_ - 0.06);
+        emit audioLevelsChanged();
+    });
+    meterTimer_.start();
+
     elapsedTimer_.setInterval(250);
     connect(&elapsedTimer_, &QTimer::timeout, this, &AppController::updateElapsed);
     diskTimer_.setInterval(5000);
@@ -220,6 +237,77 @@ QString AppController::audioNotice() const
     return pipeline_.audioNotice();
 }
 
+double AppController::gameGainDb() const { return gameGainDb_; }
+double AppController::micGainDb() const { return micGainDb_; }
+bool AppController::gameMuted() const { return gameMuted_; }
+bool AppController::micMuted() const { return micMuted_; }
+double AppController::gameLevel() const { return gameLevel_; }
+double AppController::micLevel() const { return micLevel_; }
+
+void AppController::setGameGainDb(const double decibels)
+{
+    const auto bounded = qBound(-40.0, decibels, 12.0);
+    if (qFuzzyCompare(bounded, gameGainDb_)) {
+        return;
+    }
+    gameGainDb_ = bounded;
+    QSettings().setValue(QStringLiteral("audio/gameGainDb"), bounded);
+    pipeline_.setAudioGainDb(QStringLiteral("game"), bounded);
+    emit audioMixChanged();
+}
+
+void AppController::setMicGainDb(const double decibels)
+{
+    const auto bounded = qBound(-40.0, decibels, 12.0);
+    if (qFuzzyCompare(bounded, micGainDb_)) {
+        return;
+    }
+    micGainDb_ = bounded;
+    QSettings().setValue(QStringLiteral("audio/micGainDb"), bounded);
+    pipeline_.setAudioGainDb(QStringLiteral("mic"), bounded);
+    emit audioMixChanged();
+}
+
+void AppController::setGameMuted(const bool muted)
+{
+    if (muted == gameMuted_) {
+        return;
+    }
+    gameMuted_ = muted;
+    QSettings().setValue(QStringLiteral("audio/gameMuted"), muted);
+    pipeline_.setAudioMuted(QStringLiteral("game"), muted);
+    emit audioMixChanged();
+}
+
+void AppController::setMicMuted(const bool muted)
+{
+    if (muted == micMuted_) {
+        return;
+    }
+    micMuted_ = muted;
+    QSettings().setValue(QStringLiteral("audio/micMuted"), muted);
+    pipeline_.setAudioMuted(QStringLiteral("mic"), muted);
+    emit audioMixChanged();
+}
+
+void AppController::applyAudioMix()
+{
+    pipeline_.setAudioGainDb(QStringLiteral("game"), gameGainDb_);
+    pipeline_.setAudioGainDb(QStringLiteral("mic"), micGainDb_);
+    pipeline_.setAudioMuted(QStringLiteral("game"), gameMuted_);
+    pipeline_.setAudioMuted(QStringLiteral("mic"), micMuted_);
+}
+
+void AppController::noteAudioLevel(const QString &source, const double rmsDb, double)
+{
+    const double position = qBound(0.0, (rmsDb + 60.0) / 60.0, 1.0);
+    if (source == QLatin1String("game")) {
+        gameLevel_ = qMax(gameLevel_, position);
+    } else if (source == QLatin1String("mic")) {
+        micLevel_ = qMax(micLevel_, position);
+    }
+}
+
 void AppController::initialize(QObject *previewItem)
 {
     if (initialized_) {
@@ -347,6 +435,7 @@ void AppController::startPipeline()
                                .filePath(QStringLiteral("ring"));
     config.ringMinutes = flashbackMinutes_;
     config.enablePreview = true;
+    config.enableAudioMonitoring = true;
 
     /*
      * Size the canonical output from the signal we are locked to, capped at 4K.
@@ -376,6 +465,7 @@ void AppController::startPipeline()
     if (!pipeline_.start(config, &pipelineError)) {
         setError(pipelineError);
     }
+    applyAudioMix();
     emit capturingChanged();
 }
 
@@ -431,4 +521,3 @@ QString AppController::newRecordingPath() const
     const auto stamp = QDateTime::currentDateTime().toString(QStringLiteral("yyyy-MM-dd_HH-mm-ss"));
     return QDir(outputDirectory_).filePath(QStringLiteral("quadcap_%1.mkv").arg(stamp));
 }
-

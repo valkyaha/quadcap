@@ -32,6 +32,12 @@ class AppController final : public QObject {
     Q_PROPERTY(bool secureBootEnabled READ secureBootEnabled NOTIFY setupChanged)
     Q_PROPERTY(QString audioSummary READ audioSummary NOTIFY capturingChanged)
     Q_PROPERTY(QString audioNotice READ audioNotice NOTIFY capturingChanged)
+    Q_PROPERTY(double gameGainDb READ gameGainDb WRITE setGameGainDb NOTIFY audioMixChanged)
+    Q_PROPERTY(double micGainDb READ micGainDb WRITE setMicGainDb NOTIFY audioMixChanged)
+    Q_PROPERTY(bool gameMuted READ gameMuted WRITE setGameMuted NOTIFY audioMixChanged)
+    Q_PROPERTY(bool micMuted READ micMuted WRITE setMicMuted NOTIFY audioMixChanged)
+    Q_PROPERTY(double gameLevel READ gameLevel NOTIFY audioLevelsChanged)
+    Q_PROPERTY(double micLevel READ micLevel NOTIFY audioLevelsChanged)
 
 public:
     explicit AppController(QObject *parent = nullptr);
@@ -66,6 +72,19 @@ public:
     //! Why a source is missing, so a silent track is never a silent surprise.
     [[nodiscard]] QString audioNotice() const;
 
+    [[nodiscard]] double gameGainDb() const;
+    [[nodiscard]] double micGainDb() const;
+    [[nodiscard]] bool gameMuted() const;
+    [[nodiscard]] bool micMuted() const;
+
+    [[nodiscard]] double gameLevel() const;
+    [[nodiscard]] double micLevel() const;
+
+    void setGameGainDb(double decibels);
+    void setMicGainDb(double decibels);
+    void setGameMuted(bool muted);
+    void setMicMuted(bool muted);
+
     Q_INVOKABLE void initialize(QObject *previewItem);
     Q_INVOKABLE void toggleRecording();
     Q_INVOKABLE void refreshDevice();
@@ -86,6 +105,8 @@ signals:
     void flashbackBufferedChanged();
     void lastSavedTextChanged();
     void setupChanged();
+    void audioMixChanged();
+    void audioLevelsChanged();
 
 private:
     void applyStatus(const quadcap::device::DeviceStatus &status);
@@ -98,6 +119,8 @@ private:
      */
     [[nodiscard]] bool applyEdidSource();
     void startPipeline();
+    void applyAudioMix();
+    void noteAudioLevel(const QString &source, double rmsDb, double peakDb);
     void setError(const QString &error);
     void updateElapsed();
     void updateDisk();
@@ -114,6 +137,13 @@ private:
     QTimer elapsedTimer_;
     QTimer diskTimer_;
     QTimer bufferTimer_;
+    QTimer meterTimer_;
+    double gameGainDb_ = 0.0;
+    double micGainDb_ = 0.0;
+    bool gameMuted_ = false;
+    bool micMuted_ = false;
+    double gameLevel_ = 0.0;
+    double micLevel_ = 0.0;
     qint64 recordingStartedMs_ = 0;
     int flashbackMinutes_ = 10;
     quadcap::device::EdidSource edidSource_ = quadcap::device::EdidSource::Internal;
@@ -121,4 +151,3 @@ private:
     bool suspendAutoStart_ = false;
     bool initialized_ = false;
 };
-

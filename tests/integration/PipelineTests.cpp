@@ -2,6 +2,7 @@
 
 #include <QDir>
 #include <QSignalSpy>
+#include <QSet>
 #include <QStringList>
 #include <QTemporaryDir>
 #include <QTest>
@@ -45,6 +46,7 @@ private slots:
         // Any non-empty device stands in for the card here; testSource swaps in a tone generator.
         config.gameAudioDevice = QStringLiteral("test");
         config.captureMic = true;
+        config.enableAudioMonitoring = true;
 
         QString error;
         QVERIFY2(pipeline.start(config, &error), qPrintable(error));
@@ -62,6 +64,84 @@ private slots:
 
         QCOMPARE(errors.count(), 0);
         QVERIFY(QFileInfo(recording).size() > 1024);
+    }
+
+    void gainShapesTheMixAndLeavesIsolatedTracksAlone()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+
+        CapturePipeline pipeline;
+        QSignalSpy errors(&pipeline, &CapturePipeline::errorOccurred);
+        QSignalSpy levels(&pipeline, &CapturePipeline::audioLevel);
+        PipelineConfig config;
+        config.testSource = true;
+        config.hardwareEncoder = false;
+        config.width = 320;
+        config.height = 180;
+        config.frameRate = 30;
+        config.segmentSeconds = 1;
+        config.ringMinutes = 1;
+        config.ringDirectory = temporary.filePath(QStringLiteral("ring"));
+        config.gameAudioDevice = QStringLiteral("test");
+        config.captureMic = true;
+        config.enableAudioMonitoring = true;
+
+        QString error;
+        QVERIFY2(pipeline.start(config, &error), qPrintable(error));
+
+        pipeline.setAudioMuted(QStringLiteral("mic"), true);
+        pipeline.setAudioGainDb(QStringLiteral("game"), -40.0);
+        QCOMPARE(pipeline.audioTrackNames(),
+            (QStringList {QStringLiteral("mix"), QStringLiteral("game"), QStringLiteral("mic")}));
+
+        QTRY_VERIFY_WITH_TIMEOUT(levels.count() >= 2, 5000);
+        QSet<QString> metered;
+        for (const auto &call : levels) {
+            metered.insert(call.at(0).toString());
+        }
+        QVERIFY2(metered.contains(QStringLiteral("game")), "game source should report a level");
+        QVERIFY2(metered.contains(QStringLiteral("mic")), "mic source should report a level");
+
+        pipeline.stop();
+        QCOMPARE(errors.count(), 0);
+    }
+
+    void remembersFaderPositionsAcrossARebuild()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+
+        CapturePipeline pipeline;
+        PipelineConfig config;
+        config.testSource = true;
+        config.hardwareEncoder = false;
+        config.width = 320;
+        config.height = 180;
+        config.frameRate = 30;
+        config.segmentSeconds = 1;
+        config.ringMinutes = 1;
+        config.ringDirectory = temporary.filePath(QStringLiteral("ring"));
+        config.gameAudioDevice = QStringLiteral("test");
+
+        pipeline.setAudioGainDb(QStringLiteral("mic"), -12.0);
+        pipeline.setAudioMuted(QStringLiteral("game"), true);
+
+        QString error;
+        QVERIFY2(pipeline.start(config, &error), qPrintable(error));
+        QVERIFY(pipeline.isRunning());
+        QTest::qWait(100);
+        pipeline.stop();
+
+        pipeline.setAudioGainDb(QStringLiteral("game"), -6.0);
+        pipeline.setAudioGainDb(QStringLiteral("mic"), -18.0);
+        pipeline.setAudioMuted(QStringLiteral("game"), false);
+        pipeline.setAudioMuted(QStringLiteral("mic"), true);
+
+        QVERIFY2(pipeline.start(config, &error), qPrintable(error));
+        QVERIFY(pipeline.isRunning());
+        QTest::qWait(100);
+        pipeline.stop();
     }
 
     void refusesAnAudioDeviceItCannotOpen()

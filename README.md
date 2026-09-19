@@ -21,8 +21,8 @@ Plug a console into the card, play on the passthrough display, and record what y
 - **Instant replay** — a continuous keyframe-aligned ring buffer, so you can save the last N minutes
   after something happens. Saving is a remux, so it completes in well under a second regardless of
   buffer length
-- **Separate audio tracks** — console audio and your microphone recorded as independent tracks
-  alongside a ready-to-upload mix, drift-corrected against the capture clock
+- **Live audio mix and monitoring** — hear and meter console audio, balance or mute the mix, and
+  retain raw independent tracks for post-production, drift-corrected against the capture clock
 - **Live preview** with a GPU-side path — the video never makes a round trip through system memory
 - **Output follows the source** — a 1080p console produces genuine 1080p files at a proportional
   bitrate, not upscaled 4K

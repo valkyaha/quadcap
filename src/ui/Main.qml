@@ -26,6 +26,83 @@ ApplicationWindow {
         font.letterSpacing: 0.8
     }
 
+    component ChannelStrip: RowLayout {
+        id: strip
+        property string title
+        property real level: 0
+        property real gainDb: 0
+        property bool muted: false
+        signal gainChanged(real value)
+        signal muteToggled()
+
+        spacing: 10
+
+        Text {
+            text: strip.title
+            color: strip.muted ? window.muted : window.text
+            font.pixelSize: 11
+            font.weight: Font.DemiBold
+            Layout.preferredWidth: 38
+        }
+
+        Rectangle {
+            Layout.preferredWidth: 74
+            Layout.preferredHeight: 8
+            radius: 4
+            color: "#0c0f14"
+            border.color: window.border
+
+            Rectangle {
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.margins: 1
+                height: parent.height - 2
+                width: Math.max(0, (parent.width - 2) * strip.level)
+                radius: 3
+                color: strip.muted ? "#4a5160" : (strip.level > 0.85 ? "#f2b84b" : "#49d17d")
+                Behavior on width { NumberAnimation { duration: 55 } }
+            }
+        }
+
+        Slider {
+            Layout.fillWidth: true
+            from: -40
+            to: 12
+            stepSize: 1
+            value: strip.gainDb
+            enabled: !strip.muted
+            onMoved: strip.gainChanged(value)
+        }
+
+        Text {
+            text: strip.gainDb <= -40 ? "-\u221e" : (strip.gainDb > 0 ? "+" + strip.gainDb : strip.gainDb) + " dB"
+            color: window.muted
+            font.pixelSize: 10
+            font.family: "monospace"
+            horizontalAlignment: Text.AlignRight
+            Layout.preferredWidth: 46
+        }
+
+        Button {
+            implicitWidth: 30
+            implicitHeight: 22
+            onClicked: strip.muteToggled()
+            background: Rectangle {
+                radius: 5
+                color: strip.muted ? "#3a2025" : "#1c2230"
+                border.color: strip.muted ? "#e65c68" : window.border
+            }
+            contentItem: Text {
+                text: "M"
+                color: strip.muted ? "#f05c67" : window.muted
+                font.pixelSize: 10
+                font.weight: Font.DemiBold
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+            }
+        }
+    }
+
     component Panel: Rectangle {
         color: window.panel
         border.color: window.border
@@ -353,6 +430,46 @@ ApplicationWindow {
                 ColumnLayout {
                     anchors.fill: parent
                     anchors.margins: 18
+                    spacing: 6
+
+                    RowLayout {
+                        LabelSmall { text: "AUDIO MIX" }
+                        Item { Layout.fillWidth: true }
+                        Text {
+                            text: "isolated tracks stay raw"
+                            color: "#5b6572"
+                            font.pixelSize: 9
+                        }
+                    }
+
+                    ChannelStrip {
+                        Layout.fillWidth: true
+                        title: "GAME"
+                        level: appController.gameLevel
+                        gainDb: appController.gameGainDb
+                        muted: appController.gameMuted
+                        onGainChanged: function(value) { appController.gameGainDb = value }
+                        onMuteToggled: appController.gameMuted = !appController.gameMuted
+                    }
+
+                    ChannelStrip {
+                        Layout.fillWidth: true
+                        title: "MIC"
+                        level: appController.micLevel
+                        gainDb: appController.micGainDb
+                        muted: appController.micMuted
+                        onGainChanged: function(value) { appController.micGainDb = value }
+                        onMuteToggled: appController.micMuted = !appController.micMuted
+                    }
+                }
+            }
+
+            Panel {
+                Layout.preferredWidth: 330
+                Layout.preferredHeight: 118
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: 18
                     spacing: 8
                     RowLayout {
                         LabelSmall { text: "FLASHBACK BUFFER" }
@@ -433,4 +550,3 @@ ApplicationWindow {
         }
     }
 }
-
