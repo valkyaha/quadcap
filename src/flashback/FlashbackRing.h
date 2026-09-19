@@ -31,7 +31,7 @@ struct Segment {
 class FlashbackRing final : public QObject {
     Q_OBJECT
 
-public:
+  public:
     static constexpr auto SegmentPattern = "segment-*.mkv";
 
     /*!
@@ -70,27 +70,28 @@ public:
      * covered duration is returned through \a savedSeconds.
      */
     [[nodiscard]] bool save(int minutes, const QString &outputPath, int *savedSeconds = nullptr,
-        QString *error = nullptr);
+                            QString *error = nullptr);
 
     //! Parses the numeric index out of a `segment-%06d.mkv` name; -1 when the name does not match.
     [[nodiscard]] static int indexOf(const QString &fileName);
 
-public slots:
+  public slots:
     //! Records a fragment splitmuxsink has finished writing. \a durationNs may be 0 if unreported.
     void noteSegmentClosed(const QString &path, qint64 durationNs);
 
     //! Forgets every recorded fragment, for when the pipeline restarts onto a fresh ring.
     void reset();
 
-signals:
+  signals:
     void saved(const QString &path, int seconds);
 
-private:
+  private:
     [[nodiscard]] QVector<Segment> scanDirectory() const;
 
-    //! Stitches every fragment in \a stagingDirectory into \a outputPath, copying the encoded stream.
+    //! Stitches every fragment in \a stagingDirectory into \a outputPath, copying the encoded
+    //! stream.
     [[nodiscard]] bool concatenate(const QString &stagingDirectory, const QString &outputPath,
-        QString *error) const;
+                                   QString *error) const;
 
     QString ringDirectory_;
     int segmentSeconds_ = 2;

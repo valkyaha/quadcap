@@ -8,9 +8,9 @@ namespace quadcap::device {
 /*!
  * What is standing between this machine and a working capture, in the order a person hits it.
  *
- * The card needs an out-of-tree driver that no distribution ships, and on a Secure Boot machine that
- * driver has to be signed by a key the firmware trusts. Neither is obvious from a black window, so
- * the app diagnoses it rather than leaving someone to guess.
+ * The card needs an out-of-tree driver that no distribution ships, and on a Secure Boot machine
+ * that driver has to be signed by a key the firmware trusts. Neither is obvious from a black
+ * window, so the app diagnoses it rather than leaving someone to guess.
  */
 enum class SetupIssue {
     Ready,
@@ -39,7 +39,9 @@ struct SetupStatus {
     //! The single command worth copying, empty when there is nothing to run.
     QString command;
 
-    [[nodiscard]] bool ready() const { return issue == SetupIssue::Ready; }
+    [[nodiscard]] bool ready() const {
+        return issue == SetupIssue::Ready;
+    }
 };
 
 /*!

@@ -14,7 +14,7 @@ struct DiscoveredDevice {
 };
 
 class DeviceDiscovery final {
-public:
+  public:
     static constexpr auto VendorId = "0x12ab";
     static constexpr auto DeviceId = "0x0710";
     static constexpr auto DriverName = "sc0710";
@@ -33,4 +33,3 @@ public:
 };
 
 } // namespace quadcap::device
-

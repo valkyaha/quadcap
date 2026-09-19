@@ -14,7 +14,7 @@ namespace quadcap::device {
 class CaptureDevice final : public QObject {
     Q_OBJECT
 
-public:
+  public:
     explicit CaptureDevice(QObject *parent = nullptr);
     ~CaptureDevice() override;
 
@@ -37,13 +37,13 @@ public:
     [[nodiscard]] bool startMonitoring(QString *error = nullptr);
     void stopMonitoring();
 
-signals:
+  signals:
     void statusChanged(const quadcap::device::DeviceStatus &status);
 
-private slots:
+  private slots:
     void drainEvents();
 
-private:
+  private:
     [[nodiscard]] bool openNode(const QString &node, QString *error);
     [[nodiscard]] DeviceStatus queryStatus() const;
 
@@ -57,4 +57,3 @@ private:
 };
 
 } // namespace quadcap::device
-

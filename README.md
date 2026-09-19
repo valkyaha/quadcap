@@ -46,9 +46,18 @@ driver, which quadcap installs and configures for you.
 - Linux, kernel 6.12 or newer
 - A PCIe slot wired **x4 or wider** — a narrower slot cannot carry 4K60
 - NVIDIA GPU for hardware encoding (software encoding works, but not at 4K60)
-- Qt 6.5+, GStreamer 1.22+
+- Qt 6.4+, GStreamer 1.22+
 
 ## Install
+
+Download the Linux bundle from the latest release, extract it, and run:
+
+```bash
+sudo ./packaging/install.sh
+```
+
+The bundle includes prebuilt Ubuntu 24.04+ x86-64 binaries and the pinned driver source. To build
+from source instead:
 
 ```bash
 git clone https://github.com/valkyaha/quadcap.git
@@ -62,8 +71,11 @@ Build dependencies on Debian and Ubuntu:
 
 ```bash
 sudo apt install cmake ninja-build qt6-base-dev qt6-declarative-dev \
+  qml6-module-qtqml qml6-module-qtqml-models qml6-module-qtqml-workerscript \
+  qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts \
+  qml6-module-qtquick-templates qml6-module-qtquick-window \
   libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
-  gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-qt6 \
+  gstreamer1.0-alsa gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-qt6 \
   gstreamer1.0-pipewire v4l-utils
 ```
 

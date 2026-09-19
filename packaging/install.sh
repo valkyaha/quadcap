@@ -253,7 +253,36 @@ add_to_video_group() {
 }
 
 install_app() {
+  local prebuilt_dir="${PROJECT_DIR}/prebuilt/linux-x86_64"
   local build_dir="${PROJECT_DIR}/build"
+  if [[ -x "${prebuilt_dir}/quadcap" && -x "${prebuilt_dir}/quadcapd" ]]; then
+    if command -v apt-get >/dev/null 2>&1; then
+      info "Installing application runtime dependencies"
+      apt-get update -qq
+      apt-get install -y \
+        qt6-base-dev qt6-declarative-dev \
+        qml6-module-qtqml qml6-module-qtqml-models qml6-module-qtqml-workerscript \
+        qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts \
+        qml6-module-qtquick-templates qml6-module-qtquick-window \
+        gstreamer1.0-alsa gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
+        gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly \
+        gstreamer1.0-pipewire gstreamer1.0-qt6
+    fi
+    info "Installing the prebuilt application"
+    install -Dm0755 "${prebuilt_dir}/quadcap" /usr/local/bin/quadcap
+    install -Dm0755 "${prebuilt_dir}/quadcapd" /usr/local/bin/quadcapd
+    install -Dm0644 "${PROJECT_DIR}/packaging/quadcap.desktop" \
+      /usr/local/share/applications/quadcap.desktop
+    install -Dm0644 "${PROJECT_DIR}/packaging/quadcap.svg" \
+      /usr/local/share/icons/hicolor/scalable/apps/quadcap.svg
+    install -Dm0755 "${PROJECT_DIR}/packaging/uninstall.sh" \
+      /usr/local/share/quadcap/uninstall.sh
+    install -Dm0644 "${PROJECT_DIR}/INSTALL.md" /usr/local/share/quadcap/INSTALL.md
+    install -d /usr/local/share/quadcap/edid
+    install -m0644 "${PROJECT_DIR}"/packaging/edid/* /usr/local/share/quadcap/edid/
+    ok "Installed quadcap and quadcapd into /usr/local/bin"
+    return
+  fi
   if [[ ! -x "${build_dir}/quadcap" ]]; then
     warn "No built application at ${build_dir}/quadcap; skipping app install"
     warn "Build it with: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build"

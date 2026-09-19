@@ -14,9 +14,7 @@ constexpr auto RaiseMessage = "raise\n";
 } // namespace
 
 SingleInstance::SingleInstance(const QString &name, QObject *parent)
-    : QObject(parent)
-    , socketPath_(QStringLiteral("%1-%2").arg(name).arg(::getuid()))
-{
+    : QObject(parent), socketPath_(QStringLiteral("%1-%2").arg(name).arg(::getuid())) {
     /*
      * Try to connect first. Success means somebody is listening, so this process is the second one.
      * Failure means either nothing is running or a previous run died and left the socket file
@@ -41,25 +39,23 @@ SingleInstance::SingleInstance(const QString &name, QObject *parent)
     });
     primary_ = server_->listen(socketPath_);
     if (!primary_) {
-        // Losing the race is not a failure worth blocking on; treat it as "someone else is primary".
+        // Losing the race is not a failure worth blocking on; treat it as "someone else is
+        // primary".
         server_.reset();
     }
 }
 
-SingleInstance::~SingleInstance()
-{
+SingleInstance::~SingleInstance() {
     if (server_) {
         server_->close();
     }
 }
 
-bool SingleInstance::isPrimary() const
-{
+bool SingleInstance::isPrimary() const {
     return primary_;
 }
 
-bool SingleInstance::raiseExisting()
-{
+bool SingleInstance::raiseExisting() {
     QLocalSocket socket;
     socket.connectToServer(socketPath_);
     if (!socket.waitForConnected(ConnectTimeoutMs)) {

@@ -14,7 +14,8 @@ enum class DeviceState {
 };
 
 /*!
- * Which EDID the card presents to the console, which is what the console picks its output mode from.
+ * Which EDID the card presents to the console, which is what the console picks its output mode
+ * from.
  *
  * Internal advertises the card's own capabilities and ignores whatever is plugged into HDMI OUT, so
  * a console will happily choose 4K60 HDR that the passthrough display cannot show — it reports an
@@ -64,4 +65,3 @@ struct DeviceStatus {
 } // namespace quadcap::device
 
 Q_DECLARE_METATYPE(quadcap::device::DeviceStatus)
-

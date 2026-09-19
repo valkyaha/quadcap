@@ -14,15 +14,14 @@
 namespace quadcap::flashback {
 namespace {
 
-void initializeGStreamer()
-{
+void initializeGStreamer() {
     static std::once_flag once;
     std::call_once(once, [] { gst_init(nullptr, nullptr); });
 }
 
-QString gstErrorMessage(GError *error, const gchar *debug)
-{
-    QString result = error ? QString::fromUtf8(error->message) : QStringLiteral("Unknown GStreamer error");
+QString gstErrorMessage(GError *error, const gchar *debug) {
+    QString result =
+        error ? QString::fromUtf8(error->message) : QStringLiteral("Unknown GStreamer error");
     if (debug && *debug) {
         result += QStringLiteral(" (%1)").arg(QString::fromUtf8(debug));
     }
@@ -43,8 +42,7 @@ struct SaveTargets {
  * Video goes through the parser; each audio track is queued straight into its own muxer pad, which
  * is what keeps a saved flashback from being a silent film.
  */
-void linkSourcePad(GstElement *, GstPad *pad, gpointer userData)
-{
+void linkSourcePad(GstElement *, GstPad *pad, gpointer userData) {
     const auto *targets = static_cast<SaveTargets *>(userData);
     gchar *rawName = gst_pad_get_name(pad);
     const QString name = QString::fromUtf8(rawName ? rawName : "");
@@ -86,32 +84,26 @@ void linkSourcePad(GstElement *, GstPad *pad, gpointer userData)
 
 } // namespace
 
-FlashbackRing::FlashbackRing(QObject *parent)
-    : QObject(parent)
-{
+FlashbackRing::FlashbackRing(QObject *parent) : QObject(parent) {
     initializeGStreamer();
 }
 
 void FlashbackRing::configure(const QString &ringDirectory, const int segmentSeconds,
-    const bool hardwareEncoder)
-{
+                              const bool hardwareEncoder) {
     ringDirectory_ = ringDirectory;
     segmentSeconds_ = qMax(1, segmentSeconds);
     hardwareEncoder_ = hardwareEncoder;
 }
 
-QString FlashbackRing::ringDirectory() const
-{
+QString FlashbackRing::ringDirectory() const {
     return ringDirectory_;
 }
 
-int FlashbackRing::segmentSeconds() const
-{
+int FlashbackRing::segmentSeconds() const {
     return segmentSeconds_;
 }
 
-int FlashbackRing::indexOf(const QString &fileName)
-{
+int FlashbackRing::indexOf(const QString &fileName) {
     static const QRegularExpression pattern(QStringLiteral("^segment-(\\d+)\\.mkv$"));
     const auto match = pattern.match(fileName);
     if (!match.hasMatch()) {
@@ -122,31 +114,29 @@ int FlashbackRing::indexOf(const QString &fileName)
     return ok ? value : -1;
 }
 
-void FlashbackRing::noteSegmentClosed(const QString &path, const qint64 durationNs)
-{
+void FlashbackRing::noteSegmentClosed(const QString &path, const qint64 durationNs) {
     const QFileInfo info(path);
     const auto index = indexOf(info.fileName());
     if (index < 0) {
         return;
     }
-    const auto known = std::find_if(closed_.begin(), closed_.end(),
-        [index](const Segment &segment) { return segment.index == index; });
+    const auto known =
+        std::find_if(closed_.begin(), closed_.end(),
+                     [index](const Segment &segment) { return segment.index == index; });
     if (known != closed_.end()) {
         known->durationNs = durationNs;
         return;
     }
-    closed_.append(Segment {info.absoluteFilePath(), index, info.size(), durationNs});
+    closed_.append(Segment{info.absoluteFilePath(), index, info.size(), durationNs});
     std::sort(closed_.begin(), closed_.end(),
-        [](const Segment &lhs, const Segment &rhs) { return lhs.index < rhs.index; });
+              [](const Segment &lhs, const Segment &rhs) { return lhs.index < rhs.index; });
 }
 
-void FlashbackRing::reset()
-{
+void FlashbackRing::reset() {
     closed_.clear();
 }
 
-QVector<Segment> FlashbackRing::scanDirectory() const
-{
+QVector<Segment> FlashbackRing::scanDirectory() const {
     const QDir ring(ringDirectory_);
     QVector<Segment> segments;
     const auto entries = ring.entryInfoList({QString::fromLatin1(SegmentPattern)}, QDir::Files);
@@ -156,15 +146,14 @@ QVector<Segment> FlashbackRing::scanDirectory() const
         if (index < 0) {
             continue;
         }
-        segments.append(Segment {entry.absoluteFilePath(), index, entry.size(), 0});
+        segments.append(Segment{entry.absoluteFilePath(), index, entry.size(), 0});
     }
     std::sort(segments.begin(), segments.end(),
-        [](const Segment &lhs, const Segment &rhs) { return lhs.index < rhs.index; });
+              [](const Segment &lhs, const Segment &rhs) { return lhs.index < rhs.index; });
     return segments;
 }
 
-QVector<Segment> FlashbackRing::finalizedSegments() const
-{
+QVector<Segment> FlashbackRing::finalizedSegments() const {
     if (ringDirectory_.isEmpty()) {
         return {};
     }
@@ -176,7 +165,7 @@ QVector<Segment> FlashbackRing::finalizedSegments() const
         for (const auto &segment : closed_) {
             const QFileInfo info(segment.path);
             if (info.exists() && info.size() > 0) {
-                live.append(Segment {segment.path, segment.index, info.size(), segment.durationNs});
+                live.append(Segment{segment.path, segment.index, info.size(), segment.durationNs});
             }
         }
         return live;
@@ -195,8 +184,7 @@ QVector<Segment> FlashbackRing::finalizedSegments() const
     return segments;
 }
 
-int FlashbackRing::availableSeconds() const
-{
+int FlashbackRing::availableSeconds() const {
     const auto segments = finalizedSegments();
     qint64 totalNs = 0;
     for (const auto &segment : segments) {
@@ -209,8 +197,7 @@ int FlashbackRing::availableSeconds() const
 }
 
 bool FlashbackRing::save(const int minutes, const QString &outputPath, int *savedSeconds,
-    QString *error)
-{
+                         QString *error) {
     if (ringDirectory_.isEmpty()) {
         if (error) {
             *error = QStringLiteral("No ring directory is configured");
@@ -247,7 +234,8 @@ bool FlashbackRing::save(const int minutes, const QString &outputPath, int *save
     const QFileInfo output(outputPath);
     if (!QDir().mkpath(output.absolutePath())) {
         if (error) {
-            *error = QStringLiteral("Could not create output directory %1").arg(output.absolutePath());
+            *error =
+                QStringLiteral("Could not create output directory %1").arg(output.absolutePath());
         }
         return false;
     }
@@ -258,9 +246,9 @@ bool FlashbackRing::save(const int minutes, const QString &outputPath, int *save
      * for the duration of the remux: it costs no space and no copy, it cannot race, and it leaves
      * the staging glob containing exactly the fragments we mean to stitch.
      */
-    const auto staging = QDir(ringDirectory_)
-                             .filePath(QStringLiteral(".save-%1")
-                                           .arg(QDateTime::currentMSecsSinceEpoch()));
+    const auto staging =
+        QDir(ringDirectory_)
+            .filePath(QStringLiteral(".save-%1").arg(QDateTime::currentMSecsSinceEpoch()));
     if (!QDir().mkpath(staging)) {
         if (error) {
             *error = QStringLiteral("Could not create staging directory %1").arg(staging);
@@ -278,7 +266,7 @@ bool FlashbackRing::save(const int minutes, const QString &outputPath, int *save
             // The ring recycled this file between listing and pinning; the rest is still usable.
             continue;
         }
-        pinned.append(Segment {linkPath, segment.index, segment.sizeBytes, segment.durationNs});
+        pinned.append(Segment{linkPath, segment.index, segment.sizeBytes, segment.durationNs});
     }
 
     const auto cleanup = [&staging] { QDir(staging).removeRecursively(); };
@@ -286,7 +274,8 @@ bool FlashbackRing::save(const int minutes, const QString &outputPath, int *save
     if (pinned.isEmpty()) {
         cleanup();
         if (error) {
-            *error = QStringLiteral("The ring recycled every selected segment before it could be read");
+            *error =
+                QStringLiteral("The ring recycled every selected segment before it could be read");
         }
         return false;
     }
@@ -310,17 +299,18 @@ bool FlashbackRing::save(const int minutes, const QString &outputPath, int *save
 }
 
 bool FlashbackRing::concatenate(const QString &stagingDirectory, const QString &outputPath,
-    QString *error) const
-{
+                                QString *error) const {
     GstElement *pipeline = gst_pipeline_new("flashback-save");
     GstElement *source = gst_element_factory_make("splitmuxsrc", "source");
-    GstElement *parser = gst_element_factory_make(hardwareEncoder_ ? "h265parse" : "h264parse", "parser");
+    GstElement *parser =
+        gst_element_factory_make(hardwareEncoder_ ? "h265parse" : "h264parse", "parser");
     GstElement *mux = gst_element_factory_make("matroskamux", "mux");
     GstElement *sink = gst_element_factory_make("filesink", "sink");
 
     if (!pipeline || !source || !parser || !mux || !sink) {
         if (error) {
-            *error = QStringLiteral("Required GStreamer elements for flashback remuxing are unavailable");
+            *error = QStringLiteral(
+                "Required GStreamer elements for flashback remuxing are unavailable");
         }
         gst_clear_object(&pipeline);
         gst_clear_object(&source);
@@ -332,7 +322,8 @@ bool FlashbackRing::concatenate(const QString &stagingDirectory, const QString &
 
     // The staging directory holds exactly the pinned fragments, so the glob needs no further
     // filtering and splitmuxsrc restores their order and timestamps for us.
-    const auto glob = QFile::encodeName(QDir(stagingDirectory).filePath(QString::fromLatin1(SegmentPattern)));
+    const auto glob =
+        QFile::encodeName(QDir(stagingDirectory).filePath(QString::fromLatin1(SegmentPattern)));
     g_object_set(source, "location", glob.constData(), nullptr);
     const auto pathBytes = QFile::encodeName(outputPath);
     g_object_set(sink, "location", pathBytes.constData(), nullptr);
@@ -347,7 +338,7 @@ bool FlashbackRing::concatenate(const QString &stagingDirectory, const QString &
         return false;
     }
     // Outlives the pipeline below, and is freed once the remux has finished.
-    auto targets = std::make_unique<SaveTargets>(SaveTargets {pipeline, parser, mux});
+    auto targets = std::make_unique<SaveTargets>(SaveTargets{pipeline, parser, mux});
     g_signal_connect(source, "pad-added", G_CALLBACK(linkSourcePad), targets.get());
 
     if (gst_element_set_state(pipeline, GST_STATE_PLAYING) == GST_STATE_CHANGE_FAILURE) {
@@ -362,8 +353,8 @@ bool FlashbackRing::concatenate(const QString &stagingDirectory, const QString &
     GstBus *bus = gst_element_get_bus(pipeline);
     bool ok = false;
     QString failure;
-    GstMessage *message = gst_bus_timed_pop_filtered(bus, 60 * GST_SECOND,
-        static_cast<GstMessageType>(GST_MESSAGE_ERROR | GST_MESSAGE_EOS));
+    GstMessage *message = gst_bus_timed_pop_filtered(
+        bus, 60 * GST_SECOND, static_cast<GstMessageType>(GST_MESSAGE_ERROR | GST_MESSAGE_EOS));
     if (!message) {
         failure = QStringLiteral("Timed out while remuxing the flashback buffer");
     } else if (GST_MESSAGE_TYPE(message) == GST_MESSAGE_EOS) {

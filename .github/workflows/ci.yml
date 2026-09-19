@@ -1,0 +1,143 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DEBIAN_FRONTEND: noninteractive
+
+jobs:
+  quality:
+    name: Quality gates
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Install tools and dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            clang-format clang-tidy cmake cppcheck ninja-build pkg-config shellcheck \
+            qt6-base-dev qt6-declarative-dev \
+            qml6-module-qtqml qml6-module-qtqml-models qml6-module-qtqml-workerscript \
+            qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts \
+            qml6-module-qtquick-templates qml6-module-qtquick-window \
+            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            gstreamer1.0-alsa gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
+            gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly \
+            gstreamer1.0-pipewire gstreamer1.0-qt6
+      - name: Check formatting
+        run: find src tests -type f \( -name '*.cpp' -o -name '*.h' \) -print0 | xargs -0 clang-format --dry-run --Werror
+      - name: Check shell scripts
+        run: shellcheck -S warning packaging/*.sh
+      - name: Static analysis
+        run: |
+          cppcheck --error-exitcode=1 --enable=warning,performance,portability \
+            --inline-suppr --suppress=missingIncludeSystem --std=c++20 \
+            -Dslots= -Dsignals=public '-DQ_PROPERTY(...)=' -DQ_INVOKABLE= \
+            '-DQ_DECLARE_METATYPE(...)=' -DQ_OBJECT= -Isrc src tests
+      - name: Configure warnings-as-errors build
+        run: >-
+          cmake -S . -B build-quality -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_COMPILE_WARNING_AS_ERROR=ON
+          -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+      - name: Compile
+        run: cmake --build build-quality --parallel 2
+      - name: Check QML
+        run: cmake --build build-quality --target all_qmllint
+
+  test:
+    name: Sanitized tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            cmake ninja-build pkg-config qt6-base-dev qt6-declarative-dev \
+            qml6-module-qtqml qml6-module-qtqml-models qml6-module-qtqml-workerscript \
+            qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts \
+            qml6-module-qtquick-templates qml6-module-qtquick-window \
+            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            gstreamer1.0-alsa gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
+            gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly \
+            gstreamer1.0-pipewire gstreamer1.0-qt6
+      - name: Configure sanitizers
+        run: >-
+          cmake -S . -B build-sanitized -G Ninja
+          -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_COMPILE_WARNING_AS_ERROR=ON
+          -DCMAKE_CXX_FLAGS=-fsanitize=address,undefined\ -fno-omit-frame-pointer
+          -DCMAKE_EXE_LINKER_FLAGS=-fsanitize=address,undefined
+      - name: Compile
+        run: cmake --build build-sanitized --parallel 2
+      - name: Test
+        env:
+          ASAN_OPTIONS: detect_leaks=0:halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+          QT_QPA_PLATFORM: offscreen
+        run: ctest --test-dir build-sanitized --output-on-failure
+
+  codeql:
+    name: CodeQL security scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            cmake ninja-build pkg-config qt6-base-dev qt6-declarative-dev \
+            qml6-module-qtqml qml6-module-qtqml-models qml6-module-qtqml-workerscript \
+            qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts \
+            qml6-module-qtquick-templates qml6-module-qtquick-window \
+            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
+      - uses: github/codeql-action/init@3ea06614dafe36dec890db3446326e0d40ce53d4
+        with:
+          languages: c-cpp
+          queries: security-extended,security-and-quality
+      - name: Configure
+        run: cmake -S . -B build-codeql -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo
+      - name: Compile
+        run: cmake --build build-codeql --parallel 2
+      - uses: github/codeql-action/analyze@3ea06614dafe36dec890db3446326e0d40ce53d4
+        with:
+          category: /language:c-cpp
+
+  dependency-review:
+    name: Dependency review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294
+        with:
+          fail-on-severity: moderate
+          deny-licenses: AGPL-1.0-only, AGPL-3.0-only

@@ -1,7 +1,7 @@
 #include "device/CaptureDevice.h"
 #include "device/DeviceDiscovery.h"
-#include "device/SystemCheck.h"
 #include "device/DeviceTypes.h"
+#include "device/SystemCheck.h"
 #include "pipeline/CapturePipeline.h"
 
 #include <QCommandLineOption>
@@ -24,21 +24,21 @@ using quadcap::device::DeviceStatus;
 
 namespace {
 
-QJsonObject statusJson(const DeviceStatus &status)
-{
-    QJsonObject result {
+QJsonObject statusJson(const DeviceStatus &status) {
+    QJsonObject result{
         {QStringLiteral("state"), quadcap::device::stateName(status.state)},
         {QStringLiteral("device"), status.deviceNode},
         {QStringLiteral("pciAddress"), status.pciAddress},
         {QStringLiteral("card"), status.cardName},
     };
     if (status.mode.isValid()) {
-        result.insert(QStringLiteral("mode"), QJsonObject {
-            {QStringLiteral("width"), static_cast<qint64>(status.mode.width)},
-            {QStringLiteral("height"), static_cast<qint64>(status.mode.height)},
-            {QStringLiteral("fps"), status.mode.framesPerSecond()},
-            {QStringLiteral("interlaced"), status.mode.interlaced},
-        });
+        result.insert(QStringLiteral("mode"),
+                      QJsonObject{
+                          {QStringLiteral("width"), static_cast<qint64>(status.mode.width)},
+                          {QStringLiteral("height"), static_cast<qint64>(status.mode.height)},
+                          {QStringLiteral("fps"), status.mode.framesPerSecond()},
+                          {QStringLiteral("interlaced"), status.mode.interlaced},
+                      });
     }
     if (!status.error.isEmpty()) {
         result.insert(QStringLiteral("error"), status.error);
@@ -46,8 +46,7 @@ QJsonObject statusJson(const DeviceStatus &status)
     return result;
 }
 
-void printStatus(const DeviceStatus &status, bool json)
-{
+void printStatus(const DeviceStatus &status, bool json) {
     QTextStream out(stdout);
     if (json) {
         out << QJsonDocument(statusJson(status)).toJson(QJsonDocument::Compact) << Qt::endl;
@@ -79,8 +78,8 @@ void printStatus(const DeviceStatus &status, bool json)
  * ring, so it can verify capture over ssh or in a soak run without a display attached.
  */
 int recordForSeconds(const DeviceStatus &status, const QString &path, const int seconds,
-    const int width, const int height, const int frameRate, const bool hardwareEncoder)
-{
+                     const int width, const int height, const int frameRate,
+                     const bool hardwareEncoder) {
     QTextStream out(stdout);
     QTextStream err(stderr);
 
@@ -104,12 +103,12 @@ int recordForSeconds(const DeviceStatus &status, const QString &path, const int 
     QString failure;
     bool failed = false;
     QObject::connect(&pipeline, &quadcap::pipeline::CapturePipeline::errorOccurred,
-        [&failure, &failed](const QString &message) {
-            if (!failed) {
-                failure = message;
-                failed = true;
-            }
-        });
+                     [&failure, &failed](const QString &message) {
+                         if (!failed) {
+                             failure = message;
+                             failed = true;
+                         }
+                     });
 
     QString error;
     if (!pipeline.start(config, &error)) {
@@ -132,8 +131,8 @@ int recordForSeconds(const DeviceStatus &status, const QString &path, const int 
     ticker.setInterval(1000);
     QObject::connect(&ticker, &QTimer::timeout, [&] {
         const auto done = static_cast<int>(elapsed.elapsed() / 1000);
-        out << "\r  " << done << "/" << seconds << "s  "
-            << (QFileInfo(path).size() / (1024 * 1024)) << " MB" << Qt::flush;
+        out << "\r  " << done << "/" << seconds << "s  " << (QFileInfo(path).size() / (1024 * 1024))
+            << " MB" << Qt::flush;
         if (failed || done >= seconds) {
             loop.quit();
         }
@@ -164,29 +163,45 @@ int recordForSeconds(const DeviceStatus &status, const QString &path, const int 
 
 } // namespace
 
-int main(int argc, char **argv)
-{
+int main(int argc, char **argv) {
     QCoreApplication app(argc, argv);
     QCoreApplication::setApplicationName(QStringLiteral("quadcapd"));
     QCoreApplication::setApplicationVersion(QStringLiteral("0.1.0"));
 
     QCommandLineParser parser;
-    parser.setApplicationDescription(QStringLiteral("Inspect and monitor a quadcap capture device"));
+    parser.setApplicationDescription(
+        QStringLiteral("Inspect and monitor a quadcap capture device"));
     parser.addHelpOption();
     parser.addVersionOption();
-    parser.addOption({{QStringLiteral("s"), QStringLiteral("status")}, QStringLiteral("Print device status and exit")});
-    parser.addOption({{QStringLiteral("w"), QStringLiteral("watch")}, QStringLiteral("Print status and monitor source changes")});
+    parser.addOption({{QStringLiteral("s"), QStringLiteral("status")},
+                      QStringLiteral("Print device status and exit")});
+    parser.addOption({{QStringLiteral("w"), QStringLiteral("watch")},
+                      QStringLiteral("Print status and monitor source changes")});
     parser.addOption({QStringLiteral("json"), QStringLiteral("Emit newline-delimited JSON")});
-    parser.addOption({QStringLiteral("get-edid"), QStringLiteral("Write the current EDID to a file"), QStringLiteral("file")});
-    parser.addOption({QStringLiteral("set-edid"), QStringLiteral("Apply an EDID from a file"), QStringLiteral("file")});
-    parser.addOption({QStringLiteral("setup"), QStringLiteral("Report what is blocking capture on this machine")});
-    parser.addOption({QStringLiteral("edid-source"), QStringLiteral("Advertise internal, display, or merged EDID to the source"), QStringLiteral("mode")});
-    parser.addOption({QStringLiteral("record"), QStringLiteral("Record headlessly to a file"), QStringLiteral("file")});
-    parser.addOption({QStringLiteral("seconds"), QStringLiteral("Recording length (default 15)"), QStringLiteral("n"), QStringLiteral("15")});
-    parser.addOption({QStringLiteral("width"), QStringLiteral("Canonical output width (default 3840)"), QStringLiteral("px"), QStringLiteral("3840")});
-    parser.addOption({QStringLiteral("height"), QStringLiteral("Canonical output height (default 2160)"), QStringLiteral("px"), QStringLiteral("2160")});
-    parser.addOption({QStringLiteral("fps"), QStringLiteral("Canonical output frame rate (default 60)"), QStringLiteral("n"), QStringLiteral("60")});
-    parser.addOption({QStringLiteral("software"), QStringLiteral("Use the software encoder and CPU scaling")});
+    parser.addOption({QStringLiteral("get-edid"),
+                      QStringLiteral("Write the current EDID to a file"), QStringLiteral("file")});
+    parser.addOption({QStringLiteral("set-edid"), QStringLiteral("Apply an EDID from a file"),
+                      QStringLiteral("file")});
+    parser.addOption({QStringLiteral("setup"),
+                      QStringLiteral("Report what is blocking capture on this machine")});
+    parser.addOption({QStringLiteral("edid-source"),
+                      QStringLiteral("Advertise internal, display, or merged EDID to the source"),
+                      QStringLiteral("mode")});
+    parser.addOption({QStringLiteral("record"), QStringLiteral("Record headlessly to a file"),
+                      QStringLiteral("file")});
+    parser.addOption({QStringLiteral("seconds"), QStringLiteral("Recording length (default 15)"),
+                      QStringLiteral("n"), QStringLiteral("15")});
+    parser.addOption({QStringLiteral("width"),
+                      QStringLiteral("Canonical output width (default 3840)"), QStringLiteral("px"),
+                      QStringLiteral("3840")});
+    parser.addOption({QStringLiteral("height"),
+                      QStringLiteral("Canonical output height (default 2160)"),
+                      QStringLiteral("px"), QStringLiteral("2160")});
+    parser.addOption({QStringLiteral("fps"),
+                      QStringLiteral("Canonical output frame rate (default 60)"),
+                      QStringLiteral("n"), QStringLiteral("60")});
+    parser.addOption(
+        {QStringLiteral("software"), QStringLiteral("Use the software encoder and CPU scaling")});
     parser.process(app);
 
     CaptureDevice device;
@@ -197,7 +212,8 @@ int main(int argc, char **argv)
         QString error;
         const auto bytes = device.readEdid(&error);
         QFile output(parser.value(QStringLiteral("get-edid")));
-        if (bytes.isEmpty() || !output.open(QIODevice::WriteOnly) || output.write(bytes) != bytes.size()) {
+        if (bytes.isEmpty() || !output.open(QIODevice::WriteOnly) ||
+            output.write(bytes) != bytes.size()) {
             QTextStream(stderr) << (error.isEmpty() ? output.errorString() : error) << Qt::endl;
             return 2;
         }
@@ -241,7 +257,7 @@ int main(int argc, char **argv)
 
     if (parser.isSet(QStringLiteral("edid-source"))) {
         const auto requested = parser.value(QStringLiteral("edid-source")).trimmed().toLower();
-        static const QMap<QString, quadcap::device::EdidSource> modes {
+        static const QMap<QString, quadcap::device::EdidSource> modes{
             {QStringLiteral("internal"), quadcap::device::EdidSource::Internal},
             {QStringLiteral("display"), quadcap::device::EdidSource::Display},
             {QStringLiteral("merged"), quadcap::device::EdidSource::Merged},
@@ -262,13 +278,12 @@ int main(int argc, char **argv)
 
     if (parser.isSet(QStringLiteral("record"))) {
         printStatus(initial, json);
-        return recordForSeconds(initial,
-            parser.value(QStringLiteral("record")),
-            parser.value(QStringLiteral("seconds")).toInt(),
-            parser.value(QStringLiteral("width")).toInt(),
-            parser.value(QStringLiteral("height")).toInt(),
-            parser.value(QStringLiteral("fps")).toInt(),
-            !parser.isSet(QStringLiteral("software")));
+        return recordForSeconds(initial, parser.value(QStringLiteral("record")),
+                                parser.value(QStringLiteral("seconds")).toInt(),
+                                parser.value(QStringLiteral("width")).toInt(),
+                                parser.value(QStringLiteral("height")).toInt(),
+                                parser.value(QStringLiteral("fps")).toInt(),
+                                !parser.isSet(QStringLiteral("software")));
     }
 
     printStatus(initial, json);
@@ -281,9 +296,7 @@ int main(int argc, char **argv)
         QTextStream(stderr) << error << Qt::endl;
         return 2;
     }
-    QObject::connect(&device, &CaptureDevice::statusChanged, &app, [json](const DeviceStatus &status) {
-        printStatus(status, json);
-    });
+    QObject::connect(&device, &CaptureDevice::statusChanged, &app,
+                     [json](const DeviceStatus &status) { printStatus(status, json); });
     return app.exec();
 }
-

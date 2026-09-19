@@ -8,7 +8,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_AUTOMOC ON)
 
 include(CTest)
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Network Qml Quick QuickControls2 Test)
+find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Network Qml Quick QuickControls2 Test)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GSTREAMER REQUIRED IMPORTED_TARGET
     gstreamer-1.0>=1.22
@@ -64,6 +64,7 @@ qt_add_executable(quadcap
 qt_add_qml_module(quadcap
     URI Quadcap
     VERSION 1.0
+    IMPORT_PATH "${CMAKE_CURRENT_SOURCE_DIR}/qml-stubs"
     QML_FILES src/ui/Main.qml
     # Without this the module lands at a resource path the engine does not search, so the binary
     # only works when a Quadcap/ directory happens to sit beside it — that is, from the build tree.

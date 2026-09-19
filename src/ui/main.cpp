@@ -9,6 +9,7 @@
 #include <QQuickWindow>
 #include <QTextStream>
 #include <QTimer>
+#include <QUrl>
 
 #include <gst/gst.h>
 
@@ -25,8 +26,7 @@ namespace {
  * `import org.freedesktop.gstreamer.Qt6GLVideoItem` resolve; without it the engine fails with
  * "module is not installed" before any pipeline has had a chance to run.
  */
-bool registerVideoItemType()
-{
+bool registerVideoItemType() {
     GstElement *probe = gst_element_factory_make("qml6glsink", nullptr);
     if (!probe) {
         return false;
@@ -38,8 +38,7 @@ bool registerVideoItemType()
 
 } // namespace
 
-int main(int argc, char **argv)
-{
+int main(int argc, char **argv) {
     QGuiApplication app(argc, argv);
     QCoreApplication::setOrganizationName(QStringLiteral("quadcap"));
     QCoreApplication::setApplicationName(QStringLiteral("quadcap"));
@@ -63,18 +62,18 @@ int main(int argc, char **argv)
 
     gst_init(&argc, &argv);
     if (!registerVideoItemType()) {
-        QTextStream(stderr)
-            << "qml6glsink is unavailable, so the preview cannot be shown. "
-            << "Install gstreamer1.0-qt6.\n";
+        QTextStream(stderr) << "qml6glsink is unavailable, so the preview cannot be shown. "
+                            << "Install gstreamer1.0-qt6.\n";
         return 1;
     }
 
     AppController controller;
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("appController"), &controller);
-    QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed,
-        &app, [] { QCoreApplication::exit(1); }, Qt::QueuedConnection);
-    engine.loadFromModule(QStringLiteral("Quadcap"), QStringLiteral("Main"));
+    QObject::connect(
+        &engine, &QQmlApplicationEngine::objectCreationFailed, &app,
+        [] { QCoreApplication::exit(1); }, Qt::QueuedConnection);
+    engine.load(QUrl(QStringLiteral("qrc:/qt/qml/Quadcap/src/ui/Main.qml")));
 
     if (engine.rootObjects().isEmpty()) {
         return 1;
@@ -108,9 +107,9 @@ int main(int argc, char **argv)
             },
             Qt::QueuedConnection);
     } else {
-        QTimer::singleShot(0, &controller, [&controller, preview] { controller.initialize(preview); });
+        QTimer::singleShot(0, &controller,
+                           [&controller, preview] { controller.initialize(preview); });
     }
 
     return app.exec();
 }
-

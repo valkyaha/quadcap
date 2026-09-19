@@ -2,8 +2,16 @@
 
 Works on any machine with a supported card, including with Secure Boot enabled.
 
+Download and extract the Linux bundle from the latest GitHub release, then run:
+
 ```bash
-git clone <this repo> quadcap && cd quadcap
+sudo ./packaging/install.sh
+```
+
+The release bundle contains prebuilt Ubuntu 24.04+ x86-64 binaries and the exact pinned driver
+source. A source checkout can be built and installed with:
+
+```bash
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 sudo ./packaging/install.sh
@@ -111,15 +119,18 @@ The sc0710 driver is not installed
 - Linux with kernel 6.12 or newer (tested on 6.12 through 7.0)
 - A supported card: Elgato 4K60 Pro MK.2, 4K Pro, or Cam Link Pro (PCI `12ab:0710`)
 - A PCIe slot wired **x4 or wider** — a narrower slot cannot carry 4K60
-- Qt 6.5+, GStreamer 1.22+, and `gstreamer1.0-qt6` for the preview
+- Qt 6.4+, GStreamer 1.22+, and `gstreamer1.0-qt6` for the preview
 - An NVIDIA GPU for hardware encoding; without one, pass `--software` to `quadcapd`
 
 Build dependencies on Debian/Ubuntu:
 
 ```bash
 sudo apt install cmake ninja-build qt6-base-dev qt6-declarative-dev \
+  qml6-module-qtqml qml6-module-qtqml-models qml6-module-qtqml-workerscript \
+  qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts \
+  qml6-module-qtquick-templates qml6-module-qtquick-window \
   libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
-  gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-qt6 \
+  gstreamer1.0-alsa gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-qt6 \
   gstreamer1.0-pipewire v4l-utils
 ```
 

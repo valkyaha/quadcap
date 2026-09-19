@@ -8,20 +8,20 @@ using quadcap::ui::SingleInstance;
 class SingleInstanceTests final : public QObject {
     Q_OBJECT
 
-private slots:
-    void firstClaimsItAndSecondDefersToIt()
-    {
+  private slots:
+    void firstClaimsItAndSecondDefersToIt() {
         const auto key = QStringLiteral("quadcap-test-%1").arg(QCoreApplication::applicationPid());
 
         SingleInstance first(key);
-        QVERIFY2(first.isPrimary(), "nothing was running, so this one should have claimed the socket");
+        QVERIFY2(first.isPrimary(),
+                 "nothing was running, so this one should have claimed the socket");
 
         SingleInstance second(key);
-        QVERIFY2(!second.isPrimary(), "a second instance must defer rather than fight for the device");
+        QVERIFY2(!second.isPrimary(),
+                 "a second instance must defer rather than fight for the device");
     }
 
-    void secondInstanceCanRaiseTheFirst()
-    {
+    void secondInstanceCanRaiseTheFirst() {
         const auto key = QStringLiteral("quadcap-raise-%1").arg(QCoreApplication::applicationPid());
 
         SingleInstance first(key);
@@ -36,8 +36,7 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(raised.count() >= 1, 3000);
     }
 
-    void reclaimsTheSocketAfterAnUncleanExit()
-    {
+    void reclaimsTheSocketAfterAnUncleanExit() {
         const auto key = QStringLiteral("quadcap-stale-%1").arg(QCoreApplication::applicationPid());
 
         {

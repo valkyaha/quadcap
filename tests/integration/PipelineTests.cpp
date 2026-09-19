@@ -1,8 +1,8 @@
 #include "pipeline/CapturePipeline.h"
 
 #include <QDir>
-#include <QSignalSpy>
 #include <QSet>
+#include <QSignalSpy>
 #include <QStringList>
 #include <QTemporaryDir>
 #include <QTest>
@@ -15,9 +15,8 @@ using quadcap::pipeline::PipelineConfig;
 class PipelineTests final : public QObject {
     Q_OBJECT
 
-private slots:
-    void rejectsInvalidConfiguration()
-    {
+  private slots:
+    void rejectsInvalidConfiguration() {
         CapturePipeline pipeline;
         QString error;
         PipelineConfig config;
@@ -27,8 +26,7 @@ private slots:
         QVERIFY(!error.isEmpty());
     }
 
-    void splitsGameAndMicIntoSeparateTracks()
-    {
+    void splitsGameAndMicIntoSeparateTracks() {
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
 
@@ -52,8 +50,9 @@ private slots:
         QVERIFY2(pipeline.start(config, &error), qPrintable(error));
 
         // Mix first so the file is usable untouched, then the isolated sources for post.
-        QCOMPARE(pipeline.audioTrackNames(),
-            (QStringList {QStringLiteral("mix"), QStringLiteral("game"), QStringLiteral("mic")}));
+        QCOMPARE(
+            pipeline.audioTrackNames(),
+            (QStringList{QStringLiteral("mix"), QStringLiteral("game"), QStringLiteral("mic")}));
 
         const auto recording = temporary.filePath(QStringLiteral("tracks.mkv"));
         QVERIFY2(pipeline.startRecording(recording, &error), qPrintable(error));
@@ -66,8 +65,7 @@ private slots:
         QVERIFY(QFileInfo(recording).size() > 1024);
     }
 
-    void gainShapesTheMixAndLeavesIsolatedTracksAlone()
-    {
+    void gainShapesTheMixAndLeavesIsolatedTracksAlone() {
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
 
@@ -92,8 +90,9 @@ private slots:
 
         pipeline.setAudioMuted(QStringLiteral("mic"), true);
         pipeline.setAudioGainDb(QStringLiteral("game"), -40.0);
-        QCOMPARE(pipeline.audioTrackNames(),
-            (QStringList {QStringLiteral("mix"), QStringLiteral("game"), QStringLiteral("mic")}));
+        QCOMPARE(
+            pipeline.audioTrackNames(),
+            (QStringList{QStringLiteral("mix"), QStringLiteral("game"), QStringLiteral("mic")}));
 
         QTRY_VERIFY_WITH_TIMEOUT(levels.count() >= 2, 5000);
         QSet<QString> metered;
@@ -107,8 +106,7 @@ private slots:
         QCOMPARE(errors.count(), 0);
     }
 
-    void remembersFaderPositionsAcrossARebuild()
-    {
+    void remembersFaderPositionsAcrossARebuild() {
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
 
@@ -144,15 +142,14 @@ private slots:
         pipeline.stop();
     }
 
-    void refusesAnAudioDeviceItCannotOpen()
-    {
+    void refusesAnAudioDeviceItCannotOpen() {
         // An ALSA card index nothing is plugged into: the element builds, but the device does not
         // open. Catching that here is what keeps it out of the graph.
         GstElement *absent = gst_element_factory_make("alsasrc", nullptr);
         QVERIFY(absent != nullptr);
         g_object_set(absent, "device", "hw:99,0", nullptr);
         QVERIFY2(!CapturePipeline::canOpenSource(absent),
-            "a device that cannot be opened must not pass the probe");
+                 "a device that cannot be opened must not pass the probe");
         gst_object_unref(absent);
 
         // A source with no device to claim reaches READY, so the probe must not reject everything.
@@ -162,8 +159,7 @@ private slots:
         gst_object_unref(tone);
     }
 
-    void capturesVideoWhenTheAudioDeviceIsUnavailable()
-    {
+    void capturesVideoWhenTheAudioDeviceIsUnavailable() {
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
 
@@ -197,8 +193,7 @@ private slots:
         QVERIFY(QFileInfo(recording).size() > 1024);
     }
 
-    void keepsCapturingWhenNoAudioSourceExists()
-    {
+    void keepsCapturingWhenNoAudioSourceExists() {
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
 
@@ -222,8 +217,7 @@ private slots:
         pipeline.stop();
     }
 
-    void sharesEncoderBetweenRingAndRecording()
-    {
+    void sharesEncoderBetweenRingAndRecording() {
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
 
@@ -252,7 +246,9 @@ private slots:
 
         QCOMPARE(errors.count(), 0);
         QVERIFY(QFileInfo(recording).size() > 1024);
-        QVERIFY(QDir(config.ringDirectory).entryList({QStringLiteral("*.mkv")}, QDir::Files).size() >= 1);
+        QVERIFY(
+            QDir(config.ringDirectory).entryList({QStringLiteral("*.mkv")}, QDir::Files).size() >=
+            1);
         QCOMPARE(recordings.count(), 2);
     }
 };

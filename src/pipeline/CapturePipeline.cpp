@@ -13,23 +13,21 @@
 namespace quadcap::pipeline {
 namespace {
 
-void initializeGStreamer()
-{
+void initializeGStreamer() {
     static std::once_flag once;
     std::call_once(once, [] { gst_init(nullptr, nullptr); });
 }
 
-QString gstErrorMessage(GError *error, const gchar *debug)
-{
-    QString result = error ? QString::fromUtf8(error->message) : QStringLiteral("Unknown GStreamer error");
+QString gstErrorMessage(GError *error, const gchar *debug) {
+    QString result =
+        error ? QString::fromUtf8(error->message) : QStringLiteral("Unknown GStreamer error");
     if (debug && *debug) {
         result += QStringLiteral(" (%1)").arg(QString::fromUtf8(debug));
     }
     return result;
 }
 
-bool linkAll(std::initializer_list<GstElement *> elements)
-{
+bool linkAll(std::initializer_list<GstElement *> elements) {
     if (elements.size() < 2) {
         return true;
     }
@@ -46,8 +44,7 @@ bool linkAll(std::initializer_list<GstElement *> elements)
     return true;
 }
 
-double loudestChannel(const GstStructure *structure, const char *field)
-{
+double loudestChannel(const GstStructure *structure, const char *field) {
     const GValue *channels = gst_structure_get_value(structure, field);
     if (!channels) {
         return -std::numeric_limits<double>::infinity();
@@ -77,21 +74,17 @@ double loudestChannel(const GstStructure *structure, const char *field)
 
 } // namespace
 
-CapturePipeline::CapturePipeline(QObject *parent)
-    : QObject(parent)
-{
+CapturePipeline::CapturePipeline(QObject *parent) : QObject(parent) {
     initializeGStreamer();
     busTimer_.setInterval(50);
     connect(&busTimer_, &QTimer::timeout, this, &CapturePipeline::pollBus);
 }
 
-CapturePipeline::~CapturePipeline()
-{
+CapturePipeline::~CapturePipeline() {
     stop();
 }
 
-bool CapturePipeline::start(const PipelineConfig &config, QString *error)
-{
+bool CapturePipeline::start(const PipelineConfig &config, QString *error) {
     if (pipeline_) {
         if (error) {
             *error = QStringLiteral("Pipeline is already running");
@@ -131,20 +124,21 @@ bool CapturePipeline::start(const PipelineConfig &config, QString *error)
     }
     if (gst_element_set_state(pipeline_, GST_STATE_PLAYING) == GST_STATE_CHANGE_FAILURE) {
         if (error) {
-            *error = QStringLiteral("GStreamer refused to start the pipeline, with and without audio");
+            *error =
+                QStringLiteral("GStreamer refused to start the pipeline, with and without audio");
         }
         destroyPipeline();
         return false;
     }
 
-    audioNotice_ = QStringLiteral("Recording without audio: the sound devices could not be started");
+    audioNotice_ =
+        QStringLiteral("Recording without audio: the sound devices could not be started");
     emit warningOccurred(audioNotice_);
     busTimer_.start();
     return true;
 }
 
-void CapturePipeline::stop()
-{
+void CapturePipeline::stop() {
     busTimer_.stop();
     if (!pipeline_) {
         return;
@@ -162,15 +156,14 @@ void CapturePipeline::stop()
     }
     gst_element_send_event(pipeline_, gst_event_new_eos());
     GstBus *bus = gst_element_get_bus(pipeline_);
-    GstMessage *terminal = gst_bus_timed_pop_filtered(bus, 5 * GST_SECOND,
-        static_cast<GstMessageType>(GST_MESSAGE_EOS | GST_MESSAGE_ERROR));
+    GstMessage *terminal = gst_bus_timed_pop_filtered(
+        bus, 5 * GST_SECOND, static_cast<GstMessageType>(GST_MESSAGE_EOS | GST_MESSAGE_ERROR));
     gst_clear_message(&terminal);
     gst_object_unref(bus);
     destroyPipeline();
 }
 
-bool CapturePipeline::startRecording(const QString &path, QString *error)
-{
+bool CapturePipeline::startRecording(const QString &path, QString *error) {
     if (!pipeline_ || !encodedTee_) {
         if (error) {
             *error = QStringLiteral("Pipeline is not running");
@@ -187,7 +180,8 @@ bool CapturePipeline::startRecording(const QString &path, QString *error)
     const QFileInfo output(path);
     if (!QDir().mkpath(output.absolutePath())) {
         if (error) {
-            *error = QStringLiteral("Could not create output directory %1").arg(output.absolutePath());
+            *error =
+                QStringLiteral("Could not create output directory %1").arg(output.absolutePath());
         }
         return false;
     }
@@ -214,8 +208,8 @@ bool CapturePipeline::startRecording(const QString &path, QString *error)
 
     recordTeePad_ = gst_element_request_pad_simple(encodedTee_, "src_%u");
     GstPad *queueSink = gst_element_get_static_pad(recordQueue_, "sink");
-    const bool linked = recordTeePad_ && queueSink
-        && gst_pad_link(recordTeePad_, queueSink) == GST_PAD_LINK_OK;
+    const bool linked =
+        recordTeePad_ && queueSink && gst_pad_link(recordTeePad_, queueSink) == GST_PAD_LINK_OK;
     if (queueSink) {
         gst_object_unref(queueSink);
     }
@@ -245,9 +239,9 @@ bool CapturePipeline::startRecording(const QString &path, QString *error)
         GstPad *queueSink = gst_element_get_static_pad(queue, "sink");
         GstPad *queueSrc = gst_element_get_static_pad(queue, "src");
         GstPad *teePad = gst_element_request_pad_simple(audioTracks_.at(i).tee, "src_%u");
-        const bool audioLinked = muxPad && queueSink && queueSrc && teePad
-            && gst_pad_link(teePad, queueSink) == GST_PAD_LINK_OK
-            && gst_pad_link(queueSrc, muxPad) == GST_PAD_LINK_OK;
+        const bool audioLinked = muxPad && queueSink && queueSrc && teePad &&
+                                 gst_pad_link(teePad, queueSink) == GST_PAD_LINK_OK &&
+                                 gst_pad_link(queueSrc, muxPad) == GST_PAD_LINK_OK;
         gst_clear_object(&queueSink);
         gst_clear_object(&queueSrc);
         gst_clear_object(&muxPad);
@@ -257,7 +251,8 @@ bool CapturePipeline::startRecording(const QString &path, QString *error)
         if (!audioLinked) {
             destroyRecordingBranch();
             if (error) {
-                *error = QStringLiteral("Could not attach audio track %1").arg(audioTracks_.at(i).name);
+                *error =
+                    QStringLiteral("Could not attach audio track %1").arg(audioTracks_.at(i).name);
             }
             return false;
         }
@@ -266,15 +261,15 @@ bool CapturePipeline::startRecording(const QString &path, QString *error)
 
     GstPad *sinkPad = gst_element_get_static_pad(recordSink_, "sink");
     gst_pad_add_probe(sinkPad, GST_PAD_PROBE_TYPE_EVENT_DOWNSTREAM,
-        &CapturePipeline::observeRecordingEos, this, nullptr);
+                      &CapturePipeline::observeRecordingEos, this, nullptr);
     gst_object_unref(sinkPad);
 
     gst_element_sync_state_with_parent(recordQueue_);
     gst_element_sync_state_with_parent(recordMux_);
     gst_element_sync_state_with_parent(recordSink_);
 
-    gst_element_send_event(encoder_,
-        gst_video_event_new_upstream_force_key_unit(GST_CLOCK_TIME_NONE, TRUE, 0));
+    gst_element_send_event(
+        encoder_, gst_video_event_new_upstream_force_key_unit(GST_CLOCK_TIME_NONE, TRUE, 0));
 
     recordingPath_ = output.absoluteFilePath();
     recordingStopping_ = false;
@@ -282,41 +277,35 @@ bool CapturePipeline::startRecording(const QString &path, QString *error)
     return true;
 }
 
-void CapturePipeline::stopRecording()
-{
+void CapturePipeline::stopRecording() {
     if (!recordTeePad_ || recordingStopping_) {
         return;
     }
     recordingStopping_ = true;
     gst_pad_add_probe(recordTeePad_, GST_PAD_PROBE_TYPE_BLOCK_DOWNSTREAM,
-        &CapturePipeline::blockRecordingPad, this, nullptr);
+                      &CapturePipeline::blockRecordingPad, this, nullptr);
 }
 
-void CapturePipeline::setPreviewItem(QObject *item)
-{
+void CapturePipeline::setPreviewItem(QObject *item) {
     previewItem_ = item;
     if (previewSink_ && g_object_class_find_property(G_OBJECT_GET_CLASS(previewSink_), "widget")) {
         g_object_set(previewSink_, "widget", item, nullptr);
     }
 }
 
-bool CapturePipeline::isRunning() const
-{
+bool CapturePipeline::isRunning() const {
     return pipeline_ != nullptr;
 }
 
-bool CapturePipeline::isRecording() const
-{
-    return recordQueue_ != nullptr && !recordingStopping_;
+bool CapturePipeline::isRecording() const {
+    return recordQueue_ != nullptr;
 }
 
-QString CapturePipeline::currentRecording() const
-{
+QString CapturePipeline::currentRecording() const {
     return recordingPath_;
 }
 
-void CapturePipeline::pollBus()
-{
+void CapturePipeline::pollBus() {
     if (!pipeline_) {
         return;
     }
@@ -350,7 +339,7 @@ void CapturePipeline::pollBus()
                 const auto source = name.section(QLatin1Char('-'), 0, 0);
                 if (!source.isEmpty()) {
                     emit audioLevel(source, loudestChannel(structure, "rms"),
-                        loudestChannel(structure, "peak"));
+                                    loudestChannel(structure, "peak"));
                 }
                 break;
             }
@@ -372,8 +361,7 @@ void CapturePipeline::pollBus()
     gst_object_unref(bus);
 }
 
-void CapturePipeline::finalizeRecording()
-{
+void CapturePipeline::finalizeRecording() {
     if (!recordQueue_) {
         return;
     }
@@ -384,12 +372,12 @@ void CapturePipeline::finalizeRecording()
     emit recordingChanged(false, completedPath);
 }
 
-bool CapturePipeline::build(QString *error)
-{
-    if (config_.width <= 0 || config_.height <= 0 || config_.frameRate <= 0
-        || config_.segmentSeconds <= 0 || config_.ringMinutes <= 0) {
+bool CapturePipeline::build(QString *error) {
+    if (config_.width <= 0 || config_.height <= 0 || config_.frameRate <= 0 ||
+        config_.segmentSeconds <= 0 || config_.ringMinutes <= 0) {
         if (error) {
-            *error = QStringLiteral("Pipeline dimensions, rate, segment length, and ring duration must be positive");
+            *error = QStringLiteral(
+                "Pipeline dimensions, rate, segment length, and ring duration must be positive");
         }
         return false;
     }
@@ -424,12 +412,12 @@ bool CapturePipeline::build(QString *error)
     auto *ringQueue = make("queue", "ring-queue", error);
     auto *ringSink = make("splitmuxsink", "segment-ring", error);
 
-    if (!source || !sourceCaps || !rawTee || !previewQueue || !encodeQueue || !encoder_ || !parser
-        || !encodedTee_ || !ringQueue || !ringSink) {
+    if (!source || !sourceCaps || !rawTee || !previewQueue || !encodeQueue || !encoder_ ||
+        !parser || !encodedTee_ || !ringQueue || !ringSink) {
         return false;
     }
     gst_bin_add_many(GST_BIN(pipeline_), source, sourceCaps, rawTee, previewQueue, encodeQueue,
-        encoder_, parser, encodedTee_, ringQueue, ringSink, nullptr);
+                     encoder_, parser, encodedTee_, ringQueue, ringSink, nullptr);
 
     if (config_.testSource) {
         g_object_set(source, "is-live", TRUE, "pattern", 18, nullptr);
@@ -466,30 +454,17 @@ bool CapturePipeline::build(QString *error)
     const auto ceilingKbps = static_cast<guint>(qRound(90000.0 * rateScale));
 
     if (config_.hardwareEncoder) {
-        g_object_set(encoder_,
-            "rc-mode", 2,
-            "const-quality", 22.0,
-            "bitrate", targetKbps,
-            "max-bitrate", ceilingKbps,
-            "gop-size", static_cast<gint>(keyInterval),
-            "aud", TRUE,
-            nullptr);
+        g_object_set(encoder_, "rc-mode", 2, "const-quality", 22.0, "bitrate", targetKbps,
+                     "max-bitrate", ceilingKbps, "gop-size", static_cast<gint>(keyInterval), "aud",
+                     TRUE, nullptr);
     } else {
-        g_object_set(encoder_,
-            "tune", 0x00000004,
-            "speed-preset", 1,
-            "bitrate", 4000u,
-            "key-int-max", keyInterval,
-            nullptr);
+        g_object_set(encoder_, "tune", 0x00000004, "speed-preset", 1, "bitrate", 4000u,
+                     "key-int-max", keyInterval, nullptr);
     }
 
     // Preview must never be able to stall the encoder, so it drops rather than blocks.
-    g_object_set(previewQueue,
-        "leaky", 2,
-        "max-size-buffers", 2u,
-        "max-size-bytes", 0u,
-        "max-size-time", static_cast<guint64>(0),
-        nullptr);
+    g_object_set(previewQueue, "leaky", 2, "max-size-buffers", 2u, "max-size-bytes", 0u,
+                 "max-size-time", static_cast<guint64>(0), nullptr);
 
     if (config_.enablePreview) {
         previewSink_ = make("qml6glsink", "preview-sink", error);
@@ -511,7 +486,7 @@ bool CapturePipeline::build(QString *error)
      * these three settings together buy.
      */
     g_object_set(previewSink_, "sync", FALSE, "qos", FALSE, "max-lateness", G_GINT64_CONSTANT(-1),
-        nullptr);
+                 nullptr);
     if (config_.enablePreview) {
         g_object_set(previewSink_, "widget", previewItem_, nullptr);
     }
@@ -526,8 +501,10 @@ bool CapturePipeline::build(QString *error)
         }
         return false;
     }
-    const auto location = QFile::encodeName(QDir(ring).filePath(QStringLiteral("segment-%06d.mkv")));
-    const auto maxFiles = static_cast<guint>(qMax(1, config_.ringMinutes * 60 / config_.segmentSeconds));
+    const auto location =
+        QFile::encodeName(QDir(ring).filePath(QStringLiteral("segment-%06d.mkv")));
+    const auto maxFiles =
+        static_cast<guint>(qMax(1, config_.ringMinutes * 60 / config_.segmentSeconds));
     GstElement *ringMux = gst_element_factory_make("matroskamux", "ring-mux");
     if (!ringMux) {
         if (error) {
@@ -535,14 +512,9 @@ bool CapturePipeline::build(QString *error)
         }
         return false;
     }
-    g_object_set(ringSink,
-        "location", location.constData(),
-        "muxer", ringMux,
-        "max-size-time", static_cast<guint64>(config_.segmentSeconds) * GST_SECOND,
-        "max-files", maxFiles,
-        "async-finalize", FALSE,
-        nullptr);
-
+    g_object_set(ringSink, "location", location.constData(), "muxer", ringMux, "max-size-time",
+                 static_cast<guint64>(config_.segmentSeconds) * GST_SECOND, "max-files", maxFiles,
+                 "async-finalize", FALSE, nullptr);
 
     if (gpuProcessing) {
         auto *glUpload = make("glupload", "source-upload", error);
@@ -553,21 +525,22 @@ bool CapturePipeline::build(QString *error)
         auto *cudaCaps = make("capsfilter", "canonical-caps", error);
         auto *rate = make("videorate", "encode-rate", error);
         auto *rateCaps = make("capsfilter", "canonical-rate", error);
-        if (!glUpload || !glConvert || !glCaps || !cudaUpload || !cudaScale || !cudaCaps || !rate
-            || !rateCaps) {
+        if (!glUpload || !glConvert || !glCaps || !cudaUpload || !cudaScale || !cudaCaps || !rate ||
+            !rateCaps) {
             return false;
         }
         gst_bin_add_many(GST_BIN(pipeline_), glUpload, glConvert, glCaps, cudaUpload, cudaScale,
-            cudaCaps, rate, rateCaps, nullptr);
+                         cudaCaps, rate, rateCaps, nullptr);
 
         GstCaps *rgba = gst_caps_from_string("video/x-raw(memory:GLMemory),format=RGBA");
         g_object_set(glCaps, "caps", rgba, nullptr);
         gst_caps_unref(rgba);
 
-        const auto scaled = QStringLiteral("video/x-raw(memory:CUDAMemory),format=NV12,width=%1,height=%2")
-                                .arg(config_.width)
-                                .arg(config_.height)
-                                .toLatin1();
+        const auto scaled =
+            QStringLiteral("video/x-raw(memory:CUDAMemory),format=NV12,width=%1,height=%2")
+                .arg(config_.width)
+                .arg(config_.height)
+                .toLatin1();
         GstCaps *nv12 = gst_caps_from_string(scaled.constData());
         g_object_set(cudaCaps, "caps", nv12, nullptr);
         gst_caps_unref(nv12);
@@ -579,11 +552,11 @@ bool CapturePipeline::build(QString *error)
         g_object_set(rateCaps, "caps", rateFilter, nullptr);
         gst_caps_unref(rateFilter);
 
-        if (!linkAll({source, sourceCaps, glUpload, glConvert, glCaps, rawTee})
-            || !linkAll({rawTee, previewQueue, previewSink_})
-            || !linkAll({rawTee, encodeQueue, cudaUpload, cudaScale, cudaCaps, rate, rateCaps,
-                encoder_, parser, encodedTee_})
-            || !linkAll({encodedTee_, ringQueue, ringSink})) {
+        if (!linkAll({source, sourceCaps, glUpload, glConvert, glCaps, rawTee}) ||
+            !linkAll({rawTee, previewQueue, previewSink_}) ||
+            !linkAll({rawTee, encodeQueue, cudaUpload, cudaScale, cudaCaps, rate, rateCaps,
+                      encoder_, parser, encodedTee_}) ||
+            !linkAll({encodedTee_, ringQueue, ringSink})) {
             if (error) {
                 *error = QStringLiteral("Could not link the GPU capture graph");
             }
@@ -600,17 +573,16 @@ bool CapturePipeline::build(QString *error)
             return false;
         }
         gst_bin_add_many(GST_BIN(pipeline_), convert, scale, rate, capsFilter, encodeConvert,
-            encodeCaps, nullptr);
+                         encodeCaps, nullptr);
 
-        GstCaps *canonicalCaps = gst_caps_new_simple("video/x-raw",
-            "width", G_TYPE_INT, config_.width,
-            "height", G_TYPE_INT, config_.height,
-            "framerate", GST_TYPE_FRACTION, config_.frameRate, 1,
-            nullptr);
+        GstCaps *canonicalCaps = gst_caps_new_simple(
+            "video/x-raw", "width", G_TYPE_INT, config_.width, "height", G_TYPE_INT, config_.height,
+            "framerate", GST_TYPE_FRACTION, config_.frameRate, 1, nullptr);
         g_object_set(capsFilter, "caps", canonicalCaps, nullptr);
         gst_caps_unref(canonicalCaps);
 
-        GstCaps *encoderCaps = gst_caps_new_simple("video/x-raw", "format", G_TYPE_STRING, "NV12", nullptr);
+        GstCaps *encoderCaps =
+            gst_caps_new_simple("video/x-raw", "format", G_TYPE_STRING, "NV12", nullptr);
         g_object_set(encodeCaps, "caps", encoderCaps, nullptr);
         gst_caps_unref(encoderCaps);
 
@@ -627,11 +599,12 @@ bool CapturePipeline::build(QString *error)
             previewLinked = linkAll({previewQueue, previewSink_});
         }
 
-        if (!previewLinked
-            || !linkAll({source, sourceCaps, convert, scale, rate, capsFilter, rawTee})
-            || !linkAll({rawTee, previewQueue})
-            || !linkAll({rawTee, encodeQueue, encodeConvert, encodeCaps, encoder_, parser, encodedTee_})
-            || !linkAll({encodedTee_, ringQueue, ringSink})) {
+        if (!previewLinked ||
+            !linkAll({source, sourceCaps, convert, scale, rate, capsFilter, rawTee}) ||
+            !linkAll({rawTee, previewQueue}) ||
+            !linkAll(
+                {rawTee, encodeQueue, encodeConvert, encodeCaps, encoder_, parser, encodedTee_}) ||
+            !linkAll({encodedTee_, ringQueue, ringSink})) {
             if (error) {
                 *error = QStringLiteral("Could not link the capture graph");
             }
@@ -648,8 +621,7 @@ bool CapturePipeline::build(QString *error)
     return true;
 }
 
-bool CapturePipeline::canOpenSource(GstElement *element)
-{
+bool CapturePipeline::canOpenSource(GstElement *element) {
     if (!element) {
         return false;
     }
@@ -662,13 +634,11 @@ bool CapturePipeline::canOpenSource(GstElement *element)
     return opened;
 }
 
-QString CapturePipeline::audioNotice() const
-{
+QString CapturePipeline::audioNotice() const {
     return audioNotice_;
 }
 
-void CapturePipeline::setAudioGainDb(const QString &source, const double decibels)
-{
+void CapturePipeline::setAudioGainDb(const QString &source, const double decibels) {
     pendingGainDb_.insert(source, decibels);
     const double linear = decibels <= -40.0 ? 0.0 : std::pow(10.0, decibels / 20.0);
     const double volume = qBound(0.0, linear, 10.0);
@@ -680,8 +650,7 @@ void CapturePipeline::setAudioGainDb(const QString &source, const double decibel
     }
 }
 
-void CapturePipeline::setAudioMuted(const QString &source, const bool muted)
-{
+void CapturePipeline::setAudioMuted(const QString &source, const bool muted) {
     pendingMuted_.insert(source, muted);
     if (GstElement *gain = mixGain_.value(source)) {
         g_object_set(gain, "mute", muted ? TRUE : FALSE, nullptr);
@@ -691,8 +660,7 @@ void CapturePipeline::setAudioMuted(const QString &source, const bool muted)
     }
 }
 
-QStringList CapturePipeline::audioTrackNames() const
-{
+QStringList CapturePipeline::audioTrackNames() const {
     QStringList names;
     names.reserve(audioTracks_.size());
     for (const auto &track : audioTracks_) {
@@ -701,10 +669,10 @@ QStringList CapturePipeline::audioTrackNames() const
     return names;
 }
 
-GstElement *CapturePipeline::buildAudioSource(GstElement *source, const char *label)
-{
+GstElement *CapturePipeline::buildAudioSource(GstElement *source, const char *label) {
     const auto named = [label](const char *suffix) {
-        return QStringLiteral("%1-%2").arg(QString::fromLatin1(label), QString::fromLatin1(suffix))
+        return QStringLiteral("%1-%2")
+            .arg(QString::fromLatin1(label), QString::fromLatin1(suffix))
             .toLatin1();
     };
 
@@ -727,19 +695,19 @@ GstElement *CapturePipeline::buildAudioSource(GstElement *source, const char *la
     /*
      * Every source is forced to the same S16LE 48 kHz stereo shape before it is mixed or muxed.
      *
-     * The card and the microphone are independent clock domains and drift against each other by tens
-     * of parts per million — seconds an hour, which is the usual reason home-made capture tools end
-     * up out of sync. audioresample absorbs the rate difference and audiorate fills or drops samples
-     * so the output timeline stays continuous against the pipeline clock.
+     * The card and the microphone are independent clock domains and drift against each other by
+     * tens of parts per million — seconds an hour, which is the usual reason home-made capture
+     * tools end up out of sync. audioresample absorbs the rate difference and audiorate fills or
+     * drops samples so the output timeline stays continuous against the pipeline clock.
      */
-    GstCaps *shape = gst_caps_from_string(
-        "audio/x-raw,format=S16LE,rate=48000,channels=2,layout=interleaved");
+    GstCaps *shape =
+        gst_caps_from_string("audio/x-raw,format=S16LE,rate=48000,channels=2,layout=interleaved");
     g_object_set(caps, "caps", shape, nullptr);
     gst_caps_unref(shape);
     g_object_set(rate, "tolerance", static_cast<guint64>(40 * GST_MSECOND), nullptr);
 
-    g_object_set(meter, "post-messages", TRUE,
-        "interval", static_cast<guint64>(80 * GST_MSECOND), nullptr);
+    g_object_set(meter, "post-messages", TRUE, "interval", static_cast<guint64>(80 * GST_MSECOND),
+                 nullptr);
 
     gst_bin_add_many(GST_BIN(pipeline_), convert, resample, rate, caps, meter, tee, nullptr);
     if (!linkAll({source, convert, resample, rate, caps, meter, tee})) {
@@ -748,8 +716,7 @@ GstElement *CapturePipeline::buildAudioSource(GstElement *source, const char *la
     return tee;
 }
 
-bool CapturePipeline::buildAudio(GstElement *ringSink, QString *error)
-{
+bool CapturePipeline::buildAudio(GstElement *ringSink, QString *error) {
     audioTracks_.clear();
     audioNotice_.clear();
     mixGain_.clear();
@@ -769,9 +736,9 @@ bool CapturePipeline::buildAudio(GstElement *ringSink, QString *error)
                 g_object_set(source, "is-live", TRUE, "freq", 440.0, nullptr);
             } else {
                 const auto device = QFile::encodeName(config_.gameAudioDevice);
-                g_object_set(source, "device", device.constData(),
-                    "buffer-time", static_cast<gint64>(40'000),
-                    "latency-time", static_cast<gint64>(20'000), nullptr);
+                g_object_set(source, "device", device.constData(), "buffer-time",
+                             static_cast<gint64>(40'000), "latency-time",
+                             static_cast<gint64>(20'000), nullptr);
             }
             // The video capture clock is the master; audio must not drag the pipeline onto a
             // sound-card clock that runs at its own rate.
@@ -809,8 +776,8 @@ bool CapturePipeline::buildAudio(GstElement *ringSink, QString *error)
             } else {
                 gst_object_unref(source);
                 const auto note = QStringLiteral("Microphone unavailable");
-                audioNotice_ = audioNotice_.isEmpty() ? note
-                                                      : audioNotice_ + QStringLiteral("; ") + note;
+                audioNotice_ =
+                    audioNotice_.isEmpty() ? note : audioNotice_ + QStringLiteral("; ") + note;
             }
         }
     }
@@ -833,10 +800,10 @@ bool CapturePipeline::buildAudio(GstElement *ringSink, QString *error)
         GstElement *micGain = gst_element_factory_make("volume", "mic-gain");
         if (mixer && mixConvert && mixTee && gameToMix && micToMix && gameGain && micGain) {
             gst_bin_add_many(GST_BIN(pipeline_), mixer, mixConvert, mixTee, gameToMix, micToMix,
-                gameGain, micGain, nullptr);
-            const bool mixed = linkAll({gameTee, gameToMix, gameGain, mixer})
-                && linkAll({micTee, micToMix, micGain, mixer})
-                && linkAll({mixer, mixConvert, mixTee});
+                             gameGain, micGain, nullptr);
+            const bool mixed = linkAll({gameTee, gameToMix, gameGain, mixer}) &&
+                               linkAll({micTee, micToMix, micGain, mixer}) &&
+                               linkAll({mixer, mixConvert, mixTee});
             if (mixed) {
                 mixGain_.insert(QStringLiteral("game"), gameGain);
                 mixGain_.insert(QStringLiteral("mic"), micGain);
@@ -860,7 +827,7 @@ bool CapturePipeline::buildAudio(GstElement *ringSink, QString *error)
             config_.testSource ? "fakesink" : "pipewiresink", "game-monitor-sink");
         if (queue && gain && convert && resample && sink) {
             g_object_set(queue, "max-size-time", static_cast<guint64>(50 * GST_MSECOND),
-                "max-size-buffers", 0u, "max-size-bytes", 0u, "leaky", 2, nullptr);
+                         "max-size-buffers", 0u, "max-size-bytes", 0u, "leaky", 2, nullptr);
             if (g_object_class_find_property(G_OBJECT_GET_CLASS(sink), "sync")) {
                 g_object_set(sink, "sync", FALSE, nullptr);
             }
@@ -871,8 +838,8 @@ bool CapturePipeline::buildAudio(GstElement *ringSink, QString *error)
             if (linkAll({gameTee, queue, gain, convert, resample, sink})) {
                 monitorGain_ = gain;
             } else {
-                gst_bin_remove_many(
-                    GST_BIN(pipeline_), queue, gain, convert, resample, sink, nullptr);
+                gst_bin_remove_many(GST_BIN(pipeline_), queue, gain, convert, resample, sink,
+                                    nullptr);
                 if (audioNotice_.isEmpty()) {
                     audioNotice_ = QStringLiteral(
                         "Console audio is recording, but live monitoring could not start");
@@ -885,7 +852,8 @@ bool CapturePipeline::buildAudio(GstElement *ringSink, QString *error)
             gst_clear_object(&resample);
             gst_clear_object(&sink);
             if (audioNotice_.isEmpty()) {
-                audioNotice_ = QStringLiteral("Console audio is recording, but no playback sink is available");
+                audioNotice_ =
+                    QStringLiteral("Console audio is recording, but no playback sink is available");
             }
         }
     }
@@ -920,18 +888,20 @@ bool CapturePipeline::buildAudio(GstElement *ringSink, QString *error)
         GstPad *queueSink = gst_element_get_static_pad(queue, "sink");
         GstPad *queueSrc = gst_element_get_static_pad(queue, "src");
         GstPad *teePad = gst_element_request_pad_simple(audioTracks_.at(i).tee, "src_%u");
-        const auto fromTee = (teePad && queueSink) ? gst_pad_link(teePad, queueSink) : GST_PAD_LINK_REFUSED;
+        const auto fromTee =
+            (teePad && queueSink) ? gst_pad_link(teePad, queueSink) : GST_PAD_LINK_REFUSED;
         const auto toRing = (queueSrc && fromTee == GST_PAD_LINK_OK)
-            ? gst_pad_link(queueSrc, ringPad)
-            : GST_PAD_LINK_REFUSED;
+                                ? gst_pad_link(queueSrc, ringPad)
+                                : GST_PAD_LINK_REFUSED;
         gst_clear_object(&queueSink);
         gst_clear_object(&queueSrc);
         if (fromTee != GST_PAD_LINK_OK || toRing != GST_PAD_LINK_OK) {
             if (error) {
-                *error = QStringLiteral("Could not link audio track %1 into the ring (tee=%2 ring=%3)")
-                             .arg(audioTracks_.at(i).name)
-                             .arg(static_cast<int>(fromTee))
-                             .arg(static_cast<int>(toRing));
+                *error =
+                    QStringLiteral("Could not link audio track %1 into the ring (tee=%2 ring=%3)")
+                        .arg(audioTracks_.at(i).name)
+                        .arg(static_cast<int>(fromTee))
+                        .arg(static_cast<int>(toRing));
             }
             return false;
         }
@@ -939,17 +909,16 @@ bool CapturePipeline::buildAudio(GstElement *ringSink, QString *error)
     return true;
 }
 
-GstElement *CapturePipeline::make(const char *factory, const char *name, QString *error) const
-{
+GstElement *CapturePipeline::make(const char *factory, const char *name, QString *error) const {
     GstElement *element = gst_element_factory_make(factory, name);
     if (!element && error && error->isEmpty()) {
-        *error = QStringLiteral("Required GStreamer element '%1' is unavailable").arg(QString::fromLatin1(factory));
+        *error = QStringLiteral("Required GStreamer element '%1' is unavailable")
+                     .arg(QString::fromLatin1(factory));
     }
     return element;
 }
 
-void CapturePipeline::destroyPipeline()
-{
+void CapturePipeline::destroyPipeline() {
     if (!pipeline_) {
         return;
     }
@@ -972,8 +941,7 @@ void CapturePipeline::destroyPipeline()
     recordingStopping_ = false;
 }
 
-void CapturePipeline::destroyRecordingBranch()
-{
+void CapturePipeline::destroyRecordingBranch() {
     if (!pipeline_ || !recordQueue_) {
         return;
     }
@@ -1008,8 +976,8 @@ void CapturePipeline::destroyRecordingBranch()
     recordSink_ = nullptr;
 }
 
-GstPadProbeReturn CapturePipeline::blockRecordingPad(GstPad *pad, GstPadProbeInfo *, gpointer userData)
-{
+GstPadProbeReturn CapturePipeline::blockRecordingPad(GstPad *pad, GstPadProbeInfo *,
+                                                     gpointer userData) {
     auto *self = static_cast<CapturePipeline *>(userData);
     if (!self->recordQueue_) {
         return GST_PAD_PROBE_REMOVE;
@@ -1036,8 +1004,8 @@ GstPadProbeReturn CapturePipeline::blockRecordingPad(GstPad *pad, GstPadProbeInf
     return GST_PAD_PROBE_REMOVE;
 }
 
-GstPadProbeReturn CapturePipeline::observeRecordingEos(GstPad *, GstPadProbeInfo *info, gpointer userData)
-{
+GstPadProbeReturn CapturePipeline::observeRecordingEos(GstPad *, GstPadProbeInfo *info,
+                                                       gpointer userData) {
     if ((GST_PAD_PROBE_INFO_TYPE(info) & GST_PAD_PROBE_TYPE_EVENT_DOWNSTREAM) == 0) {
         return GST_PAD_PROBE_OK;
     }

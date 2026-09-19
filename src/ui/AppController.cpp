@@ -1,8 +1,8 @@
 #include "ui/AppController.h"
 
 #include "device/DeviceDiscovery.h"
-#include "device/SystemCheck.h"
 #include "device/DeviceTypes.h"
+#include "device/SystemCheck.h"
 
 #include <QDateTime>
 #include <QDir>
@@ -12,14 +12,14 @@
 #include <QStorageInfo>
 
 AppController::AppController(QObject *parent)
-    : QObject(parent)
-{
-    outputDirectory_ = QDir(QStandardPaths::writableLocation(QStandardPaths::MoviesLocation))
-                           .filePath(QStringLiteral("quadcap"));
+    : QObject(parent),
+      outputDirectory_(QDir(QStandardPaths::writableLocation(QStandardPaths::MoviesLocation))
+                           .filePath(QStringLiteral("quadcap"))) {
     QDir().mkpath(outputDirectory_);
 
     QSettings settings;
-    flashbackMinutes_ = qBound(1, settings.value(QStringLiteral("flashbackMinutes"), 10).toInt(), 30);
+    flashbackMinutes_ =
+        qBound(1, settings.value(QStringLiteral("flashbackMinutes"), 10).toInt(), 30);
     /*
      * Internal by default, which is also the driver's own default, so nothing is written and no HPD
      * bounce happens at startup.
@@ -32,10 +32,12 @@ AppController::AppController(QObject *parent)
      * (see packaging/edid/) or changing the console's own output settings.
      */
     edidSource_ = static_cast<quadcap::device::EdidSource>(
-        qBound(0, settings.value(QStringLiteral("edidSource"),
+        qBound(0,
+               settings
+                   .value(QStringLiteral("edidSource"),
                           static_cast<int>(quadcap::device::EdidSource::Internal))
-                      .toInt(),
-            2));
+                   .toInt(),
+               2));
 
     gameGainDb_ =
         qBound(-40.0, settings.value(QStringLiteral("audio/gameGainDb"), 0.0).toDouble(), 12.0);
@@ -44,8 +46,8 @@ AppController::AppController(QObject *parent)
     gameMuted_ = settings.value(QStringLiteral("audio/gameMuted"), false).toBool();
     micMuted_ = settings.value(QStringLiteral("audio/micMuted"), false).toBool();
 
-    connect(&pipeline_, &quadcap::pipeline::CapturePipeline::audioLevel,
-        this, &AppController::noteAudioLevel);
+    connect(&pipeline_, &quadcap::pipeline::CapturePipeline::audioLevel, this,
+            &AppController::noteAudioLevel);
     meterTimer_.setInterval(60);
     connect(&meterTimer_, &QTimer::timeout, this, [this] {
         gameLevel_ = qMax(0.0, gameLevel_ - 0.06);
@@ -62,38 +64,38 @@ AppController::AppController(QObject *parent)
     connect(&bufferTimer_, &QTimer::timeout, this, &AppController::flashbackBufferedChanged);
 
     // splitmuxsink's fragment-closed message is the only reliable "safe to read" signal.
-    connect(&pipeline_, &quadcap::pipeline::CapturePipeline::segmentClosed,
-        &flashback_, &quadcap::flashback::FlashbackRing::noteSegmentClosed);
+    connect(&pipeline_, &quadcap::pipeline::CapturePipeline::segmentClosed, &flashback_,
+            &quadcap::flashback::FlashbackRing::noteSegmentClosed);
 
-    connect(&device_, &quadcap::device::CaptureDevice::statusChanged,
-        this, &AppController::applyStatus);
-    connect(&pipeline_, &quadcap::pipeline::CapturePipeline::errorOccurred,
-        this, &AppController::setError);
-    connect(&pipeline_, &quadcap::pipeline::CapturePipeline::warningOccurred,
-        this, [this](const QString &warning) { setError(QStringLiteral("Pipeline warning: %1").arg(warning)); });
-    connect(&pipeline_, &quadcap::pipeline::CapturePipeline::recordingChanged,
-        this, [this](bool active, const QString &) {
-            if (active) {
-                recordingStartedMs_ = QDateTime::currentMSecsSinceEpoch();
-                elapsedTimer_.start();
-            } else {
-                recordingStartedMs_ = 0;
-                elapsedTimer_.stop();
-            }
-            emit recordingChanged();
-            emit elapsedChanged();
-        });
+    connect(&device_, &quadcap::device::CaptureDevice::statusChanged, this,
+            &AppController::applyStatus);
+    connect(&pipeline_, &quadcap::pipeline::CapturePipeline::errorOccurred, this,
+            &AppController::setError);
+    connect(&pipeline_, &quadcap::pipeline::CapturePipeline::warningOccurred, this,
+            [this](const QString &warning) {
+                setError(QStringLiteral("Pipeline warning: %1").arg(warning));
+            });
+    connect(&pipeline_, &quadcap::pipeline::CapturePipeline::recordingChanged, this,
+            [this](bool active, const QString &) {
+                if (active) {
+                    recordingStartedMs_ = QDateTime::currentMSecsSinceEpoch();
+                    elapsedTimer_.start();
+                } else {
+                    recordingStartedMs_ = 0;
+                    elapsedTimer_.stop();
+                }
+                emit recordingChanged();
+                emit elapsedChanged();
+            });
 }
 
 AppController::~AppController() = default;
 
-QString AppController::deviceState() const
-{
+QString AppController::deviceState() const {
     return quadcap::device::stateName(status_.state);
 }
 
-QString AppController::statusText() const
-{
+QString AppController::statusText() const {
     using quadcap::device::DeviceState;
     switch (status_.state) {
     case DeviceState::NoCard:
@@ -110,18 +112,15 @@ QString AppController::statusText() const
     return QStringLiteral("Device error");
 }
 
-QString AppController::signalText() const
-{
+QString AppController::signalText() const {
     return status_.mode.isValid() ? status_.mode.toString() : QStringLiteral("No active mode");
 }
 
-QString AppController::deviceName() const
-{
+QString AppController::deviceName() const {
     return status_.cardName.isEmpty() ? QStringLiteral("4K capture") : status_.cardName;
 }
 
-QString AppController::statusColor() const
-{
+QString AppController::statusColor() const {
     using quadcap::device::DeviceState;
     switch (status_.state) {
     case DeviceState::Locked:
@@ -136,23 +135,19 @@ QString AppController::statusColor() const
     return QStringLiteral("#f06464");
 }
 
-QString AppController::lastError() const
-{
+QString AppController::lastError() const {
     return lastError_;
 }
 
-bool AppController::recording() const
-{
+bool AppController::recording() const {
     return pipeline_.isRecording();
 }
 
-bool AppController::capturing() const
-{
+bool AppController::capturing() const {
     return pipeline_.isRunning();
 }
 
-QString AppController::elapsedText() const
-{
+QString AppController::elapsedText() const {
     if (recordingStartedMs_ == 0) {
         return QStringLiteral("00:00:00");
     }
@@ -163,68 +158,56 @@ QString AppController::elapsedText() const
         .arg(seconds % 60, 2, 10, QLatin1Char('0'));
 }
 
-QString AppController::diskText() const
-{
+QString AppController::diskText() const {
     const QStorageInfo storage(outputDirectory_);
     const auto gib = static_cast<double>(storage.bytesAvailable()) / (1024.0 * 1024.0 * 1024.0);
     return QStringLiteral("%1 GB free").arg(gib, 0, 'f', 1);
 }
 
-QString AppController::outputDirectory() const
-{
+QString AppController::outputDirectory() const {
     return outputDirectory_;
 }
 
-int AppController::flashbackMinutes() const
-{
+int AppController::flashbackMinutes() const {
     return flashbackMinutes_;
 }
 
-QString AppController::flashbackBufferedText() const
-{
+QString AppController::flashbackBufferedText() const {
     const auto seconds = flashback_.availableSeconds();
     return QStringLiteral("%1:%2 buffered")
         .arg(seconds / 60, 2, 10, QLatin1Char('0'))
         .arg(seconds % 60, 2, 10, QLatin1Char('0'));
 }
 
-bool AppController::flashbackReady() const
-{
+bool AppController::flashbackReady() const {
     return flashback_.availableSeconds() > 0;
 }
 
-QString AppController::lastSavedText() const
-{
+QString AppController::lastSavedText() const {
     return lastSavedText_;
 }
 
-bool AppController::setupRequired() const
-{
+bool AppController::setupRequired() const {
     return !setup_.ready();
 }
 
-QString AppController::setupHeadline() const
-{
+QString AppController::setupHeadline() const {
     return setup_.headline;
 }
 
-QStringList AppController::setupSteps() const
-{
+QStringList AppController::setupSteps() const {
     return setup_.steps;
 }
 
-QString AppController::setupCommand() const
-{
+QString AppController::setupCommand() const {
     return setup_.command;
 }
 
-bool AppController::secureBootEnabled() const
-{
+bool AppController::secureBootEnabled() const {
     return setup_.secureBootEnabled;
 }
 
-QString AppController::audioSummary() const
-{
+QString AppController::audioSummary() const {
     const auto tracks = pipeline_.audioTrackNames();
     if (tracks.isEmpty()) {
         return QStringLiteral("No audio");
@@ -232,20 +215,30 @@ QString AppController::audioSummary() const
     return tracks.join(QStringLiteral(" + "));
 }
 
-QString AppController::audioNotice() const
-{
+QString AppController::audioNotice() const {
     return pipeline_.audioNotice();
 }
 
-double AppController::gameGainDb() const { return gameGainDb_; }
-double AppController::micGainDb() const { return micGainDb_; }
-bool AppController::gameMuted() const { return gameMuted_; }
-bool AppController::micMuted() const { return micMuted_; }
-double AppController::gameLevel() const { return gameLevel_; }
-double AppController::micLevel() const { return micLevel_; }
+double AppController::gameGainDb() const {
+    return gameGainDb_;
+}
+double AppController::micGainDb() const {
+    return micGainDb_;
+}
+bool AppController::gameMuted() const {
+    return gameMuted_;
+}
+bool AppController::micMuted() const {
+    return micMuted_;
+}
+double AppController::gameLevel() const {
+    return gameLevel_;
+}
+double AppController::micLevel() const {
+    return micLevel_;
+}
 
-void AppController::setGameGainDb(const double decibels)
-{
+void AppController::setGameGainDb(const double decibels) {
     const auto bounded = qBound(-40.0, decibels, 12.0);
     if (qFuzzyCompare(bounded, gameGainDb_)) {
         return;
@@ -256,8 +249,7 @@ void AppController::setGameGainDb(const double decibels)
     emit audioMixChanged();
 }
 
-void AppController::setMicGainDb(const double decibels)
-{
+void AppController::setMicGainDb(const double decibels) {
     const auto bounded = qBound(-40.0, decibels, 12.0);
     if (qFuzzyCompare(bounded, micGainDb_)) {
         return;
@@ -268,8 +260,7 @@ void AppController::setMicGainDb(const double decibels)
     emit audioMixChanged();
 }
 
-void AppController::setGameMuted(const bool muted)
-{
+void AppController::setGameMuted(const bool muted) {
     if (muted == gameMuted_) {
         return;
     }
@@ -279,8 +270,7 @@ void AppController::setGameMuted(const bool muted)
     emit audioMixChanged();
 }
 
-void AppController::setMicMuted(const bool muted)
-{
+void AppController::setMicMuted(const bool muted) {
     if (muted == micMuted_) {
         return;
     }
@@ -290,16 +280,14 @@ void AppController::setMicMuted(const bool muted)
     emit audioMixChanged();
 }
 
-void AppController::applyAudioMix()
-{
+void AppController::applyAudioMix() {
     pipeline_.setAudioGainDb(QStringLiteral("game"), gameGainDb_);
     pipeline_.setAudioGainDb(QStringLiteral("mic"), micGainDb_);
     pipeline_.setAudioMuted(QStringLiteral("game"), gameMuted_);
     pipeline_.setAudioMuted(QStringLiteral("mic"), micMuted_);
 }
 
-void AppController::noteAudioLevel(const QString &source, const double rmsDb, double)
-{
+void AppController::noteAudioLevel(const QString &source, const double rmsDb, double) {
     const double position = qBound(0.0, (rmsDb + 60.0) / 60.0, 1.0);
     if (source == QLatin1String("game")) {
         gameLevel_ = qMax(gameLevel_, position);
@@ -308,8 +296,7 @@ void AppController::noteAudioLevel(const QString &source, const double rmsDb, do
     }
 }
 
-void AppController::initialize(QObject *previewItem)
-{
+void AppController::initialize(QObject *previewItem) {
     if (initialized_) {
         return;
     }
@@ -321,11 +308,10 @@ void AppController::initialize(QObject *previewItem)
     bufferTimer_.start();
 }
 
-void AppController::saveFlashback()
-{
+void AppController::saveFlashback() {
     const auto stamp = QDateTime::currentDateTime().toString(QStringLiteral("yyyy-MM-dd_HH-mm-ss"));
-    const auto path = QDir(outputDirectory_)
-                          .filePath(QStringLiteral("flashback_%1.mkv").arg(stamp));
+    const auto path =
+        QDir(outputDirectory_).filePath(QStringLiteral("flashback_%1.mkv").arg(stamp));
 
     int seconds = 0;
     QString error;
@@ -341,8 +327,7 @@ void AppController::saveFlashback()
     emit lastSavedTextChanged();
 }
 
-void AppController::toggleRecording()
-{
+void AppController::toggleRecording() {
     if (!pipeline_.isRunning()) {
         setError(QStringLiteral("Capture pipeline is not running"));
         return;
@@ -357,8 +342,7 @@ void AppController::toggleRecording()
     }
 }
 
-void AppController::refreshDevice()
-{
+void AppController::refreshDevice() {
     using quadcap::device::DeviceState;
 
     pipeline_.stop();
@@ -374,8 +358,8 @@ void AppController::refreshDevice()
     applyStatus(device_.probe());
     suspendAutoStart_ = false;
 
-    if (status_.state == DeviceState::NoCard || status_.state == DeviceState::NoDriver
-        || status_.state == DeviceState::Error) {
+    if (status_.state == DeviceState::NoCard || status_.state == DeviceState::NoDriver ||
+        status_.state == DeviceState::Error) {
         if (!status_.error.isEmpty()) {
             setError(status_.error);
         }
@@ -401,8 +385,7 @@ void AppController::refreshDevice()
     }
 }
 
-bool AppController::applyEdidSource()
-{
+bool AppController::applyEdidSource() {
     auto current = quadcap::device::EdidSource::Internal;
     QString error;
     if (!device_.edidSource(&current, &error)) {
@@ -427,8 +410,7 @@ bool AppController::applyEdidSource()
     return true;
 }
 
-void AppController::startPipeline()
-{
+void AppController::startPipeline() {
     quadcap::pipeline::PipelineConfig config;
     config.devicePath = status_.deviceNode;
     config.ringDirectory = QDir(QStandardPaths::writableLocation(QStandardPaths::CacheLocation))
@@ -453,8 +435,7 @@ void AppController::startPipeline()
     }
 
     // Found through sysfs by PCI address: the ALSA card index moves when USB audio comes and goes.
-    config.gameAudioDevice =
-        quadcap::device::DeviceDiscovery::alsaDeviceForPci(status_.pciAddress);
+    config.gameAudioDevice = quadcap::device::DeviceDiscovery::alsaDeviceForPci(status_.pciAddress);
 
     // The pipeline starts a fresh ring, so anything recorded about the previous one is stale.
     flashback_.reset();
@@ -469,8 +450,7 @@ void AppController::startPipeline()
     emit capturingChanged();
 }
 
-void AppController::setFlashbackMinutes(const int minutes)
-{
+void AppController::setFlashbackMinutes(const int minutes) {
     const auto bounded = qBound(1, minutes, 30);
     if (bounded == flashbackMinutes_) {
         return;
@@ -480,21 +460,19 @@ void AppController::setFlashbackMinutes(const int minutes)
     emit flashbackMinutesChanged();
 }
 
-void AppController::applyStatus(const quadcap::device::DeviceStatus &status)
-{
+void AppController::applyStatus(const quadcap::device::DeviceStatus &status) {
     status_ = status;
     emit deviceStatusChanged();
 
     // The signal locking is the cue to start capturing, wherever it came from: an EDID bounce
     // settling, the console being switched on, or a resolution change on the console's side.
-    if (initialized_ && !suspendAutoStart_ && !pipeline_.isRunning()
-        && status_.state == quadcap::device::DeviceState::Locked) {
+    if (initialized_ && !suspendAutoStart_ && !pipeline_.isRunning() &&
+        status_.state == quadcap::device::DeviceState::Locked) {
         startPipeline();
     }
 }
 
-void AppController::setError(const QString &error)
-{
+void AppController::setError(const QString &error) {
     if (error == lastError_) {
         return;
     }
@@ -506,18 +484,15 @@ void AppController::setError(const QString &error)
     emit lastErrorChanged();
 }
 
-void AppController::updateElapsed()
-{
+void AppController::updateElapsed() {
     emit elapsedChanged();
 }
 
-void AppController::updateDisk()
-{
+void AppController::updateDisk() {
     emit diskChanged();
 }
 
-QString AppController::newRecordingPath() const
-{
+QString AppController::newRecordingPath() const {
     const auto stamp = QDateTime::currentDateTime().toString(QStringLiteral("yyyy-MM-dd_HH-mm-ss"));
     return QDir(outputDirectory_).filePath(QStringLiteral("quadcap_%1.mkv").arg(stamp));
 }

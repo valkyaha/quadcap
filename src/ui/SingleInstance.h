@@ -22,7 +22,7 @@ namespace quadcap::ui {
 class SingleInstance final : public QObject {
     Q_OBJECT
 
-public:
+  public:
     /*!
      * \a name identifies the application; the socket is namespaced per user so two people logged
      * into the same machine do not block each other.
@@ -39,11 +39,11 @@ public:
     //! Asks the running instance to come to the front. Only meaningful when !isPrimary().
     bool raiseExisting();
 
-signals:
+  signals:
     //! Another launch asked us to show ourselves.
     void raiseRequested();
 
-private:
+  private:
     QString socketPath_;
     std::unique_ptr<QLocalServer> server_;
     bool primary_ = false;

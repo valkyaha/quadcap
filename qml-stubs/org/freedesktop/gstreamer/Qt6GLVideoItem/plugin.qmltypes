@@ -1,0 +1,10 @@
+import QtQuick.tooling 1.2
+
+Module {
+    Component {
+        name: "GstGLQt6VideoItem"
+        prototype: "QQuickItem"
+        exports: ["org.freedesktop.gstreamer.Qt6GLVideoItem/GstGLQt6VideoItem 1.0"]
+        exportMetaObjectRevisions: [256]
+    }
+}

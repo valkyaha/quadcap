@@ -4,24 +4,21 @@
 
 namespace quadcap::device {
 
-double SignalMode::framesPerSecond() const
-{
+double SignalMode::framesPerSecond() const {
     if (pixelClockHz == 0 || totalWidth == 0 || totalHeight == 0) {
         return 0.0;
     }
 
-    const auto fieldRate = static_cast<double>(pixelClockHz)
-        / static_cast<double>(static_cast<quint64>(totalWidth) * totalHeight);
+    const auto fieldRate = static_cast<double>(pixelClockHz) /
+                           static_cast<double>(static_cast<quint64>(totalWidth) * totalHeight);
     return interlaced ? fieldRate * 2.0 : fieldRate;
 }
 
-bool SignalMode::hasFrameRate() const
-{
+bool SignalMode::hasFrameRate() const {
     return framesPerSecond() > 0.0;
 }
 
-bool SignalMode::isValid() const
-{
+bool SignalMode::isValid() const {
     /*
      * Dimensions alone decide this. When sc0710 falls back to a procedural timing it reports the
      * active area from the card's registers but zeroes the pixel clock and every porch, so
@@ -30,8 +27,7 @@ bool SignalMode::isValid() const
     return width != 0 && height != 0;
 }
 
-QString SignalMode::toString() const
-{
+QString SignalMode::toString() const {
     if (!isValid()) {
         return QStringLiteral("unknown mode");
     }
@@ -44,8 +40,7 @@ QString SignalMode::toString() const
     return geometry + QLocale::c().toString(framesPerSecond(), 'f', 2);
 }
 
-QString edidSourceName(const EdidSource source)
-{
+QString edidSourceName(const EdidSource source) {
     switch (source) {
     case EdidSource::Internal:
         return QStringLiteral("internal");
@@ -57,8 +52,7 @@ QString edidSourceName(const EdidSource source)
     return QStringLiteral("internal");
 }
 
-QString stateName(const DeviceState state)
-{
+QString stateName(const DeviceState state) {
     switch (state) {
     case DeviceState::NoCard:
         return QStringLiteral("no-card");
@@ -75,4 +69,3 @@ QString stateName(const DeviceState state)
 }
 
 } // namespace quadcap::device
-

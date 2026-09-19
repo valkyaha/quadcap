@@ -136,10 +136,11 @@ ApplicationWindow {
             Item { Layout.fillWidth: true }
             Text { text: appController.diskText; color: window.muted; font.pixelSize: 13 }
             Button {
+                id: refreshButton
                 text: "Refresh"
                 flat: true
                 onClicked: appController.refreshDevice()
-                contentItem: Text { text: parent.text; color: window.text; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                contentItem: Text { text: refreshButton.text; color: window.text; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
             }
         }
     }

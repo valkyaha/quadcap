@@ -13,25 +13,24 @@ namespace {
 
 constexpr auto InstallCommand = "sudo ./packaging/install.sh";
 
-bool moduleLoaded()
-{
-    return QFileInfo::exists(QStringLiteral("/sys/module/%1").arg(QLatin1String(DeviceDiscovery::DriverName)));
+bool moduleLoaded() {
+    return QFileInfo::exists(
+        QStringLiteral("/sys/module/%1").arg(QLatin1String(DeviceDiscovery::DriverName)));
 }
 
-bool dkmsRegistered()
-{
+bool dkmsRegistered() {
     // dkms keeps one directory per registered package; no need to shell out to read that.
-    return QFileInfo::exists(QStringLiteral("/var/lib/dkms/%1").arg(QLatin1String(DeviceDiscovery::DriverName)));
+    return QFileInfo::exists(
+        QStringLiteral("/var/lib/dkms/%1").arg(QLatin1String(DeviceDiscovery::DriverName)));
 }
 
 /*!
  * Reads the firmware's SecureBoot variable directly.
  *
- * The efivars blob is a 4-byte attribute header followed by the value, so the last byte is the flag.
- * Absent variable means a machine booted without UEFI Secure Boot at all.
+ * The efivars blob is a 4-byte attribute header followed by the value, so the last byte is the
+ * flag. Absent variable means a machine booted without UEFI Secure Boot at all.
  */
-bool secureBootEnabled()
-{
+bool secureBootEnabled() {
     const QDir efivars(QStringLiteral("/sys/firmware/efi/efivars"));
     const auto matches = efivars.entryList({QStringLiteral("SecureBoot-*")}, QDir::Files);
     if (matches.isEmpty()) {
@@ -47,8 +46,7 @@ bool secureBootEnabled()
 
 } // namespace
 
-QString setupIssueName(const SetupIssue issue)
-{
+QString setupIssueName(const SetupIssue issue) {
     switch (issue) {
     case SetupIssue::Ready:
         return QStringLiteral("ready");
@@ -66,8 +64,7 @@ QString setupIssueName(const SetupIssue issue)
     return QStringLiteral("unknown");
 }
 
-SetupStatus inspectSystem()
-{
+SetupStatus inspectSystem() {
     SetupStatus status;
     status.cardPresent = DeviceDiscovery::cardPresent(&status.pciAddress);
     status.moduleLoaded = moduleLoaded();
@@ -118,11 +115,11 @@ SetupStatus inspectSystem()
             QStringLiteral("Run the installer from the project directory."),
         };
         if (status.secureBootEnabled) {
-            status.steps.append(
-                QStringLiteral("Secure Boot is on, so the module must be signed by a key your "
-                               "firmware trusts. If the installer has to enroll one it will ask you "
-                               "to choose a password, then you must reboot and complete enrollment "
-                               "in the blue MOK Manager screen using that password."));
+            status.steps.append(QStringLiteral(
+                "Secure Boot is on, so the module must be signed by a key your "
+                "firmware trusts. If the installer has to enroll one it will ask you "
+                "to choose a password, then you must reboot and complete enrollment "
+                "in the blue MOK Manager screen using that password."));
         }
         status.command = QString::fromLatin1(InstallCommand);
         return status;
@@ -137,8 +134,9 @@ SetupStatus inspectSystem()
         status.issue = SetupIssue::AwaitingMokEnrollment;
         status.headline = QStringLiteral("The driver is built but the kernel will not load it");
         status.steps = {
-            QStringLiteral("Under Secure Boot this almost always means the signing key has not been "
-                           "enrolled yet."),
+            QStringLiteral(
+                "Under Secure Boot this almost always means the signing key has not been "
+                "enrolled yet."),
             QStringLiteral("Enroll it, choose a password when asked, then reboot and complete "
                            "enrollment in the blue MOK Manager screen."),
             QStringLiteral("If it was already enrolled, load the module and check dmesg for the "

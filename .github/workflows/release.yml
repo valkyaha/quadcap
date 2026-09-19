@@ -1,0 +1,166 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Semantic version without the v prefix
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  DEBIAN_FRONTEND: noninteractive
+
+jobs:
+  security-scan:
+    name: CodeQL security scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            cmake ninja-build pkg-config qt6-base-dev qt6-declarative-dev \
+            qml6-module-qtqml qml6-module-qtqml-models qml6-module-qtqml-workerscript \
+            qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts \
+            qml6-module-qtquick-templates qml6-module-qtquick-window \
+            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
+      - uses: github/codeql-action/init@3ea06614dafe36dec890db3446326e0d40ce53d4
+        with:
+          languages: c-cpp
+          queries: security-extended,security-and-quality
+      - name: Configure
+        run: cmake -S . -B build-codeql -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo
+      - name: Compile
+        run: cmake --build build-codeql --parallel 2
+      - uses: github/codeql-action/analyze@3ea06614dafe36dec890db3446326e0d40ce53d4
+        with:
+          category: /language:c-cpp
+
+  verify-and-package:
+    name: Verify and package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate version
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          [[ "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          grep -Fq "project(quadcap VERSION ${VERSION} " CMakeLists.txt
+          ! git rev-parse "v${VERSION}" >/dev/null 2>&1
+      - name: Install tools and dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            clang-format cmake cppcheck git ninja-build pkg-config shellcheck xz-utils \
+            qt6-base-dev qt6-declarative-dev \
+            qml6-module-qtqml qml6-module-qtqml-models qml6-module-qtqml-workerscript \
+            qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts \
+            qml6-module-qtquick-templates qml6-module-qtquick-window \
+            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            gstreamer1.0-alsa gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
+            gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly \
+            gstreamer1.0-pipewire gstreamer1.0-qt6
+      - name: Quality gates
+        run: |
+          find src tests -type f \( -name '*.cpp' -o -name '*.h' \) -print0 | xargs -0 clang-format --dry-run --Werror
+          shellcheck -S warning packaging/*.sh
+          cppcheck --error-exitcode=1 --enable=warning,performance,portability \
+            --inline-suppr --suppress=missingIncludeSystem --std=c++20 \
+            -Dslots= -Dsignals=public '-DQ_PROPERTY(...)=' -DQ_INVOKABLE= \
+            '-DQ_DECLARE_METATYPE(...)=' -DQ_OBJECT= -Isrc src tests
+      - name: Configure
+        run: >-
+          cmake -S . -B build-release -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_COMPILE_WARNING_AS_ERROR=ON
+      - name: Compile
+        run: cmake --build build-release --parallel 2
+      - name: Test
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: ctest --test-dir build-release --output-on-failure
+      - name: Check QML
+        run: cmake --build build-release --target all_qmllint
+      - name: Fetch pinned driver source
+        run: |
+          pin="$(tr -d '[:space:]' <third_party/sc0710.pin)"
+          git clone --filter=blob:none https://github.com/Nakildias/sc0710.git release-driver
+          git -C release-driver checkout --detach "${pin}"
+      - name: Create release bundle
+        env:
+          VERSION: ${{ inputs.version }}
+        run: packaging/make-release.sh "${VERSION}" build-release release-driver dist
+      - name: Build release notes
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          previous="$(git describe --tags --abbrev=0 2>/dev/null || true)"
+          if [[ -n "${previous}" ]]; then
+            range="${previous}..HEAD"
+          else
+            range="HEAD"
+          fi
+          {
+            echo "## Changes in v${VERSION}"
+            echo
+            git log "${range}" --reverse --pretty="- %s (\`%h\`)"
+            echo
+            echo "## Verification"
+            echo
+            echo "- Release build compiled with warnings treated as errors"
+            echo "- Unit and integration tests passed"
+            echo "- Formatting, ShellCheck, Cppcheck, and QML checks passed"
+            echo "- The archive checksum is attached beside the bundle"
+          } >dist/RELEASE_NOTES.md
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: release-${{ inputs.version }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Tag and publish
+    needs: [security-scan, verify-and-package]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: release-${{ inputs.version }}
+          path: dist
+      - name: Create tag and release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+          COMMIT: ${{ github.sha }}
+        run: >-
+          gh release create "v${VERSION}"
+          "dist/quadcap-${VERSION}-linux-x86_64.tar.xz"
+          "dist/quadcap-${VERSION}-linux-x86_64.tar.xz.sha256"
+          --repo "${GITHUB_REPOSITORY}"
+          --target "${COMMIT}"
+          --title "quadcap ${VERSION}"
+          --notes-file dist/RELEASE_NOTES.md

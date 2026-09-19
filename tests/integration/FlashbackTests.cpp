@@ -14,8 +14,7 @@ using quadcap::pipeline::PipelineConfig;
 
 namespace {
 
-void writeSegment(const QDir &dir, const int index, const qint64 bytes)
-{
+void writeSegment(const QDir &dir, const int index, const qint64 bytes) {
     QFile file(dir.filePath(QStringLiteral("segment-%1.mkv").arg(index, 6, 10, QLatin1Char('0'))));
     QVERIFY(file.open(QIODevice::WriteOnly));
     if (bytes > 0) {
@@ -25,8 +24,7 @@ void writeSegment(const QDir &dir, const int index, const qint64 bytes)
 }
 
 //! Counts the audio tracks a file exposes, by watching matroskademux advertise its pads.
-int audioTrackCount(const QString &path)
-{
+int audioTrackCount(const QString &path) {
     gst_init(nullptr, nullptr);
     GstElement *pipeline = gst_pipeline_new("count");
     GstElement *source = gst_element_factory_make("filesrc", "src");
@@ -45,28 +43,30 @@ int audioTrackCount(const QString &path)
 
     auto *tracks = new int(0);
     g_signal_connect(demux, "pad-added", G_CALLBACK(+[](GstElement *, GstPad *pad, gpointer data) {
-        gchar *name = gst_pad_get_name(pad);
-        if (name && g_str_has_prefix(name, "audio")) {
-            ++*static_cast<int *>(data);
-        }
-        g_free(name);
-        // Nothing consumes these pads; a fakesink per pad would only slow the count down.
-        GstElement *sink = gst_element_factory_make("fakesink", nullptr);
-        GstElement *parent = GST_ELEMENT(gst_pad_get_parent_element(pad));
-        if (sink && parent) {
-            gst_bin_add(GST_BIN(GST_ELEMENT_PARENT(parent)), sink);
-            gst_element_sync_state_with_parent(sink);
-            GstPad *sinkPad = gst_element_get_static_pad(sink, "sink");
-            gst_pad_link(pad, sinkPad);
-            gst_object_unref(sinkPad);
-        }
-        gst_clear_object(&parent);
-    }), tracks);
+                         gchar *name = gst_pad_get_name(pad);
+                         if (name && g_str_has_prefix(name, "audio")) {
+                             ++*static_cast<int *>(data);
+                         }
+                         g_free(name);
+                         // Nothing consumes these pads; a fakesink per pad would only slow the
+                         // count down.
+                         GstElement *sink = gst_element_factory_make("fakesink", nullptr);
+                         GstElement *parent = GST_ELEMENT(gst_pad_get_parent_element(pad));
+                         if (sink && parent) {
+                             gst_bin_add(GST_BIN(GST_ELEMENT_PARENT(parent)), sink);
+                             gst_element_sync_state_with_parent(sink);
+                             GstPad *sinkPad = gst_element_get_static_pad(sink, "sink");
+                             gst_pad_link(pad, sinkPad);
+                             gst_object_unref(sinkPad);
+                         }
+                         gst_clear_object(&parent);
+                     }),
+                     tracks);
 
     gst_element_set_state(pipeline, GST_STATE_PLAYING);
     GstBus *bus = gst_element_get_bus(pipeline);
-    GstMessage *message = gst_bus_timed_pop_filtered(bus, 20 * GST_SECOND,
-        static_cast<GstMessageType>(GST_MESSAGE_ERROR | GST_MESSAGE_EOS));
+    GstMessage *message = gst_bus_timed_pop_filtered(
+        bus, 20 * GST_SECOND, static_cast<GstMessageType>(GST_MESSAGE_ERROR | GST_MESSAGE_EOS));
     if (message) {
         gst_message_unref(message);
     }
@@ -80,12 +80,10 @@ int audioTrackCount(const QString &path)
 }
 
 //! Plays a file through matroskademux and reports whether it reaches EOS without error.
-bool isReadableMatroska(const QString &path)
-{
+bool isReadableMatroska(const QString &path) {
     gst_init(nullptr, nullptr);
-    const auto description = QStringLiteral("filesrc location=\"%1\" ! matroskademux ! fakesink")
-                                 .arg(path)
-                                 .toUtf8();
+    const auto description =
+        QStringLiteral("filesrc location=\"%1\" ! matroskademux ! fakesink").arg(path).toUtf8();
     GError *parseError = nullptr;
     GstElement *pipeline = gst_parse_launch(description.constData(), &parseError);
     if (!pipeline || parseError) {
@@ -96,8 +94,8 @@ bool isReadableMatroska(const QString &path)
 
     gst_element_set_state(pipeline, GST_STATE_PLAYING);
     GstBus *bus = gst_element_get_bus(pipeline);
-    GstMessage *message = gst_bus_timed_pop_filtered(bus, 20 * GST_SECOND,
-        static_cast<GstMessageType>(GST_MESSAGE_ERROR | GST_MESSAGE_EOS));
+    GstMessage *message = gst_bus_timed_pop_filtered(
+        bus, 20 * GST_SECOND, static_cast<GstMessageType>(GST_MESSAGE_ERROR | GST_MESSAGE_EOS));
     const bool ok = message && GST_MESSAGE_TYPE(message) == GST_MESSAGE_EOS;
     if (message) {
         gst_message_unref(message);
@@ -113,17 +111,15 @@ bool isReadableMatroska(const QString &path)
 class FlashbackTests final : public QObject {
     Q_OBJECT
 
-private slots:
-    void parsesSegmentIndices()
-    {
+  private slots:
+    void parsesSegmentIndices() {
         QCOMPARE(FlashbackRing::indexOf(QStringLiteral("segment-000042.mkv")), 42);
         QCOMPARE(FlashbackRing::indexOf(QStringLiteral("segment-000000.mkv")), 0);
         QCOMPARE(FlashbackRing::indexOf(QStringLiteral("capture.mkv")), -1);
         QCOMPARE(FlashbackRing::indexOf(QStringLiteral("segment-abc.mkv")), -1);
     }
 
-    void distrustsTheUnsettledTailWhenScanningBlind()
-    {
+    void distrustsTheUnsettledTailWhenScanningBlind() {
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
         const QDir ring(temporary.path());
@@ -143,8 +139,7 @@ private slots:
         QCOMPARE(flashback.availableSeconds(), 6);
     }
 
-    void prefersReportedFragmentsOverTheDirectoryListing()
-    {
+    void prefersReportedFragmentsOverTheDirectoryListing() {
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
         const QDir ring(temporary.path());
@@ -155,8 +150,8 @@ private slots:
         FlashbackRing flashback;
         flashback.configure(ring.absolutePath(), 2, false);
         for (int i = 0; i < 4; ++i) {
-            flashback.noteSegmentClosed(ring.filePath(QStringLiteral("segment-%1.mkv")
-                                                          .arg(i, 6, 10, QLatin1Char('0'))),
+            flashback.noteSegmentClosed(
+                ring.filePath(QStringLiteral("segment-%1.mkv").arg(i, 6, 10, QLatin1Char('0'))),
                 1'000'000'000);
         }
 
@@ -171,8 +166,7 @@ private slots:
         QCOMPARE(flashback.finalizedSegments().size(), 3);
     }
 
-    void forgetsFragmentsTheRingHasRecycled()
-    {
+    void forgetsFragmentsTheRingHasRecycled() {
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
         const QDir ring(temporary.path());
@@ -194,8 +188,7 @@ private slots:
         QCOMPARE(segments.constFirst().index, 1);
     }
 
-    void ordersSegmentsNumericallyNotLexically()
-    {
+    void ordersSegmentsNumericallyNotLexically() {
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
         const QDir ring(temporary.path());
@@ -212,8 +205,7 @@ private slots:
         QCOMPARE(segments.constLast().index, 10);
     }
 
-    void reportsAnEmptyBufferInsteadOfWritingNothing()
-    {
+    void reportsAnEmptyBufferInsteadOfWritingNothing() {
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
 
@@ -225,8 +217,7 @@ private slots:
         QVERIFY(!error.isEmpty());
     }
 
-    void savesFromARingLeftBehindByAStoppedPipeline()
-    {
+    void savesFromARingLeftBehindByAStoppedPipeline() {
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
         const auto ringDirectory = temporary.filePath(QStringLiteral("ring"));
@@ -257,8 +248,7 @@ private slots:
         QVERIFY2(isReadableMatroska(output), "saved flashback did not demux cleanly");
     }
 
-    void savesTheBufferedTailAsOnePlayableFile()
-    {
+    void savesTheBufferedTailAsOnePlayableFile() {
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
         const auto ringDirectory = temporary.filePath(QStringLiteral("ring"));
@@ -279,8 +269,8 @@ private slots:
 
         FlashbackRing flashback;
         flashback.configure(ringDirectory, config.segmentSeconds, config.hardwareEncoder);
-        connect(&pipeline, &CapturePipeline::segmentClosed,
-            &flashback, &FlashbackRing::noteSegmentClosed);
+        connect(&pipeline, &CapturePipeline::segmentClosed, &flashback,
+                &FlashbackRing::noteSegmentClosed);
 
         QString error;
         QVERIFY2(pipeline.start(config, &error), qPrintable(error));

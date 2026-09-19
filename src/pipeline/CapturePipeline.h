@@ -1,11 +1,11 @@
 #pragma once
 
+#include <QHash>
 #include <QObject>
 #include <QString>
-#include <QHash>
 #include <QStringList>
-#include <QVector>
 #include <QTimer>
+#include <QVector>
 
 #include <gst/gst.h>
 
@@ -47,7 +47,7 @@ struct AudioTrack {
 class CapturePipeline final : public QObject {
     Q_OBJECT
 
-public:
+  public:
     explicit CapturePipeline(QObject *parent = nullptr);
     ~CapturePipeline() override;
 
@@ -84,7 +84,7 @@ public:
      */
     [[nodiscard]] static bool canOpenSource(GstElement *element);
 
-signals:
+  signals:
     void errorOccurred(const QString &message);
     void warningOccurred(const QString &message);
     void recordingChanged(bool recording, const QString &path);
@@ -99,11 +99,11 @@ signals:
 
     void audioLevel(const QString &source, double rmsDb, double peakDb);
 
-private slots:
+  private slots:
     void pollBus();
     void finalizeRecording();
 
-private:
+  private:
     [[nodiscard]] bool build(QString *error);
 
     /*!
@@ -121,8 +121,10 @@ private:
     void destroyPipeline();
     void destroyRecordingBranch();
 
-    static GstPadProbeReturn blockRecordingPad(GstPad *pad, GstPadProbeInfo *info, gpointer userData);
-    static GstPadProbeReturn observeRecordingEos(GstPad *pad, GstPadProbeInfo *info, gpointer userData);
+    static GstPadProbeReturn blockRecordingPad(GstPad *pad, GstPadProbeInfo *info,
+                                               gpointer userData);
+    static GstPadProbeReturn observeRecordingEos(GstPad *pad, GstPadProbeInfo *info,
+                                                 gpointer userData);
 
     PipelineConfig config_;
     QObject *previewItem_ = nullptr;

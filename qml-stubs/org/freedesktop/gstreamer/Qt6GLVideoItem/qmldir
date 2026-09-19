@@ -1,0 +1,3 @@
+module org.freedesktop.gstreamer.Qt6GLVideoItem
+typeinfo plugin.qmltypes
+depends QtQuick 2.0

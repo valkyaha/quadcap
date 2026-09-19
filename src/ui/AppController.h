@@ -21,8 +21,10 @@ class AppController final : public QObject {
     Q_PROPERTY(QString elapsedText READ elapsedText NOTIFY elapsedChanged)
     Q_PROPERTY(QString diskText READ diskText NOTIFY diskChanged)
     Q_PROPERTY(QString outputDirectory READ outputDirectory CONSTANT)
-    Q_PROPERTY(int flashbackMinutes READ flashbackMinutes WRITE setFlashbackMinutes NOTIFY flashbackMinutesChanged)
-    Q_PROPERTY(QString flashbackBufferedText READ flashbackBufferedText NOTIFY flashbackBufferedChanged)
+    Q_PROPERTY(int flashbackMinutes READ flashbackMinutes WRITE setFlashbackMinutes NOTIFY
+                   flashbackMinutesChanged)
+    Q_PROPERTY(
+        QString flashbackBufferedText READ flashbackBufferedText NOTIFY flashbackBufferedChanged)
     Q_PROPERTY(bool flashbackReady READ flashbackReady NOTIFY flashbackBufferedChanged)
     Q_PROPERTY(QString lastSavedText READ lastSavedText NOTIFY lastSavedTextChanged)
     Q_PROPERTY(bool setupRequired READ setupRequired NOTIFY setupChanged)
@@ -39,7 +41,7 @@ class AppController final : public QObject {
     Q_PROPERTY(double gameLevel READ gameLevel NOTIFY audioLevelsChanged)
     Q_PROPERTY(double micLevel READ micLevel NOTIFY audioLevelsChanged)
 
-public:
+  public:
     explicit AppController(QObject *parent = nullptr);
     ~AppController() override;
 
@@ -51,7 +53,8 @@ public:
     [[nodiscard]] QString lastError() const;
     [[nodiscard]] bool recording() const;
 
-    //! True while the capture pipeline is live, which is what decides whether a picture is on screen.
+    //! True while the capture pipeline is live, which is what decides whether a picture is on
+    //! screen.
     [[nodiscard]] bool capturing() const;
     [[nodiscard]] QString elapsedText() const;
     [[nodiscard]] QString diskText() const;
@@ -94,7 +97,7 @@ public:
 
     void setFlashbackMinutes(int minutes);
 
-signals:
+  signals:
     void deviceStatusChanged();
     void lastErrorChanged();
     void recordingChanged();
@@ -108,7 +111,7 @@ signals:
     void audioMixChanged();
     void audioLevelsChanged();
 
-private:
+  private:
     void applyStatus(const quadcap::device::DeviceStatus &status);
 
     /*!
