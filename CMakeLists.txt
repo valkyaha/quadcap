@@ -45,8 +45,16 @@ target_include_directories(quadcap_flashback PUBLIC src)
 target_link_libraries(quadcap_flashback PUBLIC Qt6::Core PkgConfig::GSTREAMER)
 target_compile_options(quadcap_flashback PRIVATE -Wall -Wextra -Wpedantic)
 
+add_library(quadcap_obs
+    src/obs/ObsScene.cpp
+    src/obs/ObsScene.h
+)
+target_include_directories(quadcap_obs PUBLIC src)
+target_link_libraries(quadcap_obs PUBLIC Qt6::Core)
+target_compile_options(quadcap_obs PRIVATE -Wall -Wextra -Wpedantic)
+
 add_executable(quadcapd src/control/main.cpp)
-target_link_libraries(quadcapd PRIVATE quadcap_device quadcap_pipeline Qt6::Core)
+target_link_libraries(quadcapd PRIVATE quadcap_device quadcap_pipeline quadcap_obs Qt6::Core)
 
 add_library(quadcap_singleinstance
     src/ui/SingleInstance.cpp
@@ -77,6 +85,7 @@ target_link_libraries(quadcap PRIVATE
     quadcap_pipeline
     quadcap_flashback
     quadcap_singleinstance
+    quadcap_obs
     Qt6::Core
     Qt6::Network
     Qt6::Gui

@@ -60,7 +60,22 @@ faders in quadcap shape only what it records; what OBS receives is unprocessed.
 sinks for the audio, both configured to survive a reboot. Recording and the preview keep priority —
 the branches feeding OBS drop frames rather than let a slow consumer stall capture.
 
-Headless, `quadcapd --record out.mkv --obs` does the same thing.
+### Getting the scene into OBS
+
+Rather than adding three sources by hand, press **Create OBS scene**. It writes a scene collection
+wired to the devices on this machine, which OBS then offers under **Scene Collection → quadcap**.
+Close OBS first: it keeps its collections in memory and writes them out when it exits, so anything
+added underneath a running instance is discarded. quadcap checks and will tell you.
+
+Headless, the same two things:
+
+```bash
+quadcapd --write-obs-scene       # writes the collection to OBS's config directory
+quadcapd --record out.mkv --obs  # record and feed OBS at the same time
+```
+
+The scene names only the device and its input, leaving OBS to detect format, resolution and frame
+rate, so it keeps working when the console changes mode.
 
 ## Requirements
 

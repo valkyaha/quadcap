@@ -3,6 +3,7 @@
 #include "device/DeviceDiscovery.h"
 #include "device/DeviceTypes.h"
 #include "device/SystemCheck.h"
+#include "obs/ObsScene.h"
 
 #include <QDateTime>
 #include <QDir>
@@ -220,6 +221,46 @@ QString AppController::audioSummary() const {
 
 QString AppController::audioNotice() const {
     return pipeline_.audioNotice();
+}
+
+QString AppController::installObsScene() {
+    if (quadcap::obs::ObsScene::obsIsRunning()) {
+        return QStringLiteral("Close OBS first — it rewrites its scene files when it exits, so a "
+                              "collection written now would be discarded.");
+    }
+
+    quadcap::obs::SceneSources sources;
+    sources.videoDevice = quadcap::device::DeviceDiscovery::obsLoopbackDevice();
+    if (quadcap::pipeline::CapturePipeline::audioSinkExists(QStringLiteral("quadcap-game"))) {
+        sources.gameSink = QStringLiteral("quadcap-game");
+    }
+    if (quadcap::pipeline::CapturePipeline::audioSinkExists(QStringLiteral("quadcap-mic"))) {
+        sources.micSink = QStringLiteral("quadcap-mic");
+    }
+
+    const auto path = quadcap::obs::ObsScene::defaultCollectionPath();
+    QString error;
+    if (!quadcap::obs::ObsScene::write(sources, path, &error)) {
+        return error;
+    }
+
+    // Saying which parts made it in matters: a scene missing the microphone looks like a bug
+    // rather than a sink that was never created.
+    QStringList included;
+    if (!sources.videoDevice.isEmpty()) {
+        included << QStringLiteral("video");
+    }
+    if (!sources.gameSink.isEmpty()) {
+        included << QStringLiteral("game");
+    }
+    if (!sources.micSink.isEmpty()) {
+        included << QStringLiteral("mic");
+    }
+    const auto missing = 3 - included.size();
+    const auto summary =
+        QStringLiteral("Scene written with %1. Open OBS and pick quadcap under Scene Collection.")
+            .arg(included.join(QStringLiteral(" + ")));
+    return missing > 0 ? summary + QStringLiteral(" Run the installer to add the rest.") : summary;
 }
 
 bool AppController::obsEnabled() const {

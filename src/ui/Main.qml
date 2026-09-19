@@ -513,16 +513,32 @@ ApplicationWindow {
                             }
                         }
 
-                        Text {
-                            Layout.fillWidth: true
-                            visible: appController.obsNotice.length > 0
-                            text: appController.obsNotice
-                            color: "#e0c07e"
-                            font.pixelSize: 9
-                            wrapMode: Text.WordWrap
-                            elide: Text.ElideRight
-                            maximumLineCount: 2
+                        Button {
+                            id: sceneButton
+                            text: "Create OBS scene"
+                            implicitHeight: 26
+                            onClicked: obsSceneResult.text = appController.installObsScene()
+                            contentItem: Text {
+                                text: sceneButton.text
+                                color: window.text
+                                font.pixelSize: 11
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
                         }
+
+                        Item { Layout.fillWidth: true }
+                    }
+
+                    Text {
+                        id: obsSceneResult
+                        Layout.fillWidth: true
+                        text: appController.obsNotice
+                        color: "#e0c07e"
+                        font.pixelSize: 9
+                        wrapMode: Text.WordWrap
+                        elide: Text.ElideRight
+                        maximumLineCount: 2
                     }
                 }
             }

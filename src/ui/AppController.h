@@ -108,6 +108,14 @@ class AppController final : public QObject {
     //! Writes the buffered tail to the output directory without interrupting capture.
     Q_INVOKABLE void saveFlashback();
 
+    /*!
+     * Writes an OBS scene collection wired to quadcap's outputs.
+     *
+     * Returns a sentence for the UI, because every outcome here is something the person needs to
+     * read: it worked, OBS is running and would discard it, or the outputs do not exist yet.
+     */
+    Q_INVOKABLE QString installObsScene();
+
     void setFlashbackMinutes(int minutes);
 
   signals:

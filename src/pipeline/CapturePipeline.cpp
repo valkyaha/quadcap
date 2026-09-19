@@ -752,13 +752,14 @@ void CapturePipeline::buildObsVideo(GstElement *rawTee) {
     }
 
     const auto device = QFile::encodeName(config_.obsVideoDevice);
-    // OBS reads whatever the loopback advertises; NV12 is half the bytes of a packed RGB frame,
-    // which at 4K60 is the difference between a copy that keeps up and one that does not.
+    // YUY2 rather than the cheaper NV12. OBS reads v4l2 through libv4l2, which refuses NV12 from a
+    // loopback node: the source fails to initialise with "Selected video format not supported" and
+    // the scene comes up with a black camera. YUY2 costs a third more bandwidth and works.
     g_object_set(sink, "device", device.constData(), "sync", FALSE, nullptr);
     if (g_object_class_find_property(G_OBJECT_GET_CLASS(sink), "provide-clock")) {
         g_object_set(sink, "provide-clock", FALSE, nullptr);
     }
-    const auto wanted = QStringLiteral("video/x-raw,format=NV12,width=%1,height=%2")
+    const auto wanted = QStringLiteral("video/x-raw,format=YUY2,width=%1,height=%2")
                             .arg(width)
                             .arg(height)
                             .toLatin1();

@@ -2,6 +2,7 @@
 #include "device/DeviceDiscovery.h"
 #include "device/DeviceTypes.h"
 #include "device/SystemCheck.h"
+#include "obs/ObsScene.h"
 #include "pipeline/CapturePipeline.h"
 
 #include <QCommandLineOption>
@@ -224,6 +225,9 @@ int main(int argc, char **argv) {
         {QStringLiteral("software"), QStringLiteral("Use the software encoder and CPU scaling")});
     parser.addOption(
         {QStringLiteral("obs"), QStringLiteral("Also send video and each audio source to OBS")});
+    parser.addOption({QStringLiteral("write-obs-scene"),
+                      QStringLiteral("Write an OBS scene collection wired to quadcap's outputs"),
+                      QStringLiteral("file"), quadcap::obs::ObsScene::defaultCollectionPath()});
     parser.process(app);
 
     // Probed once up front: every branch below needs to know whether a card is present, and each
@@ -255,6 +259,31 @@ int main(int argc, char **argv) {
             QTextStream(stderr) << error << Qt::endl;
             return 2;
         }
+        return 0;
+    }
+
+    if (parser.isSet(QStringLiteral("write-obs-scene"))) {
+        QTextStream out(stdout);
+        QTextStream err(stderr);
+        if (quadcap::obs::ObsScene::obsIsRunning()) {
+            err << "OBS is running; it would overwrite this on exit. Close it first." << Qt::endl;
+            return 2;
+        }
+        quadcap::obs::SceneSources sources;
+        sources.videoDevice = quadcap::device::DeviceDiscovery::obsLoopbackDevice();
+        if (quadcap::pipeline::CapturePipeline::audioSinkExists(QStringLiteral("quadcap-game"))) {
+            sources.gameSink = QStringLiteral("quadcap-game");
+        }
+        if (quadcap::pipeline::CapturePipeline::audioSinkExists(QStringLiteral("quadcap-mic"))) {
+            sources.micSink = QStringLiteral("quadcap-mic");
+        }
+        const auto path = parser.value(QStringLiteral("write-obs-scene"));
+        QString failure;
+        if (!quadcap::obs::ObsScene::write(sources, path, &failure)) {
+            err << failure << Qt::endl;
+            return 2;
+        }
+        out << "wrote " << path << Qt::endl;
         return 0;
     }
 
