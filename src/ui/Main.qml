@@ -467,8 +467,11 @@ ApplicationWindow {
 
             Panel {
                 Layout.preferredWidth: 330
-                Layout.preferredHeight: 118
+                // Sized to its contents: a fixed height clipped the result of Create OBS scene,
+                // so the scene was written and nothing on screen said so.
+                Layout.preferredHeight: obsColumn.implicitHeight + 36
                 ColumnLayout {
+                    id: obsColumn
                     anchors.fill: parent
                     anchors.margins: 18
                     spacing: 6
@@ -517,7 +520,7 @@ ApplicationWindow {
                             id: sceneButton
                             text: "Create OBS scene"
                             implicitHeight: 26
-                            onClicked: obsSceneResult.text = appController.installObsScene()
+                            onClicked: appController.installObsScene()
                             contentItem: Text {
                                 text: sceneButton.text
                                 color: window.text
@@ -531,14 +534,21 @@ ApplicationWindow {
                     }
 
                     Text {
-                        id: obsSceneResult
                         Layout.fillWidth: true
+                        visible: appController.obsSceneMessage.length > 0
+                        text: appController.obsSceneMessage
+                        color: appController.obsSceneOk ? "#7ee081" : "#e0c07e"
+                        font.pixelSize: 10
+                        wrapMode: Text.WordWrap
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        visible: appController.obsNotice.length > 0
                         text: appController.obsNotice
                         color: "#e0c07e"
                         font.pixelSize: 9
                         wrapMode: Text.WordWrap
-                        elide: Text.ElideRight
-                        maximumLineCount: 2
                     }
                 }
             }

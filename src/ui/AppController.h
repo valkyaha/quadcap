@@ -43,6 +43,8 @@ class AppController final : public QObject {
     Q_PROPERTY(bool obsEnabled READ obsEnabled WRITE setObsEnabled NOTIFY obsChanged)
     Q_PROPERTY(QString obsStatus READ obsStatus NOTIFY obsChanged)
     Q_PROPERTY(QString obsNotice READ obsNotice NOTIFY obsChanged)
+    Q_PROPERTY(QString obsSceneMessage READ obsSceneMessage NOTIFY obsSceneChanged)
+    Q_PROPERTY(bool obsSceneOk READ obsSceneOk NOTIFY obsSceneChanged)
     Q_PROPERTY(double gameLevel READ gameLevel NOTIFY audioLevelsChanged)
     Q_PROPERTY(double micLevel READ micLevel NOTIFY audioLevelsChanged)
 
@@ -93,6 +95,10 @@ class AppController final : public QObject {
     //! Why part of the OBS route is not running, so a missing source in OBS has an explanation.
     [[nodiscard]] QString obsNotice() const;
 
+    //! Outcome of the last attempt to write the OBS scene. Empty until one is made.
+    [[nodiscard]] QString obsSceneMessage() const;
+    [[nodiscard]] bool obsSceneOk() const;
+
     void setObsEnabled(bool enabled);
 
     [[nodiscard]] double gameLevel() const;
@@ -116,7 +122,7 @@ class AppController final : public QObject {
      * Returns a sentence for the UI, because every outcome here is something the person needs to
      * read: it worked, OBS is running and would discard it, or the outputs do not exist yet.
      */
-    Q_INVOKABLE QString installObsScene();
+    Q_INVOKABLE void installObsScene();
 
     void setFlashbackMinutes(int minutes);
 
@@ -134,6 +140,7 @@ class AppController final : public QObject {
     void audioMixChanged();
     void audioLevelsChanged();
     void obsChanged();
+    void obsSceneChanged();
 
   private:
     void applyStatus(const quadcap::device::DeviceStatus &status);
@@ -181,6 +188,8 @@ class AppController final : public QObject {
     double gameGainDb_ = 0.0;
     double micGainDb_ = 0.0;
     bool obsEnabled_ = false;
+    QString obsSceneMessage_;
+    bool obsSceneOk_ = false;
     bool gameMuted_ = false;
     bool micMuted_ = false;
     double gameLevel_ = 0.0;
@@ -190,5 +199,13 @@ class AppController final : public QObject {
     quadcap::device::EdidSource edidSource_ = quadcap::device::EdidSource::Internal;
     //! Suppresses the lock-triggered auto-start while refreshDevice is still setting things up.
     bool suspendAutoStart_ = false;
+    /*!
+     * Set when the pipeline fails, to stop the lock-triggered auto-start retrying it forever.
+     *
+     * A capture device held by another application fails every time, and the status events that
+     * follow each failure would otherwise start it again immediately. Cleared by Refresh, or by
+     * the signal dropping and coming back, both of which mean conditions may have changed.
+     */
+    bool autoStartBlocked_ = false;
     bool initialized_ = false;
 };

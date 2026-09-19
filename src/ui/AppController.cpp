@@ -74,7 +74,25 @@ AppController::AppController(QObject *parent)
     connect(&device_, &quadcap::device::CaptureDevice::statusChanged, this,
             &AppController::applyStatus);
     connect(&pipeline_, &quadcap::pipeline::CapturePipeline::errorOccurred, this,
-            &AppController::setError);
+            [this](const QString &message) {
+                // Stop the lock-triggered auto-start from immediately trying again. Without this a
+                // card held by another application produces a failure, a status event, another
+                // failure, and the window fills with errors as fast as the device can refuse.
+                autoStartBlocked_ = true;
+                // The card is a /dev/video node like any other, and OBS will happily open it as a
+                // camera. When it does, quadcap cannot, and the raw GStreamer text does not say
+                // that is what happened.
+                auto reported = message;
+                if (!status_.deviceNode.isEmpty() && message.contains(status_.deviceNode)) {
+                    reported += QStringLiteral(" — another application is using the capture card. "
+                                               "A Video Capture Device pointed at %1 in OBS is the "
+                                               "usual cause; OBS should read %2 instead.")
+                                    .arg(status_.deviceNode,
+                                         quadcap::device::DeviceDiscovery::obsLoopbackDevice());
+                }
+                setError(reported);
+                emit capturingChanged();
+            });
     connect(&pipeline_, &quadcap::pipeline::CapturePipeline::warningOccurred, this,
             [this](const QString &warning) {
                 setError(QStringLiteral("Pipeline warning: %1").arg(warning));
@@ -223,10 +241,25 @@ QString AppController::audioNotice() const {
     return pipeline_.audioNotice();
 }
 
-QString AppController::installObsScene() {
+QString AppController::obsSceneMessage() const {
+    return obsSceneMessage_;
+}
+
+bool AppController::obsSceneOk() const {
+    return obsSceneOk_;
+}
+
+void AppController::installObsScene() {
+    const auto report = [this](const bool ok, const QString &message) {
+        obsSceneOk_ = ok;
+        obsSceneMessage_ = message;
+        emit obsSceneChanged();
+    };
+
     if (quadcap::obs::ObsScene::obsIsRunning()) {
-        return QStringLiteral("Close OBS first — it rewrites its scene files when it exits, so a "
-                              "collection written now would be discarded.");
+        report(false, QStringLiteral("Close OBS first — it rewrites its scene files when it exits, "
+                                     "so a collection written now would be discarded."));
+        return;
     }
 
     quadcap::obs::SceneSources sources;
@@ -241,7 +274,8 @@ QString AppController::installObsScene() {
     const auto path = quadcap::obs::ObsScene::defaultCollectionPath();
     QString error;
     if (!quadcap::obs::ObsScene::write(sources, path, &error)) {
-        return error;
+        report(false, error);
+        return;
     }
 
     // Saying which parts made it in matters: a scene missing the microphone looks like a bug
@@ -256,11 +290,15 @@ QString AppController::installObsScene() {
     if (!sources.micSink.isEmpty()) {
         included << QStringLiteral("mic");
     }
-    const auto missing = 3 - included.size();
-    const auto summary =
-        QStringLiteral("Scene written with %1. Open OBS and pick quadcap under Scene Collection.")
-            .arg(included.join(QStringLiteral(" + ")));
-    return missing > 0 ? summary + QStringLiteral(" Run the installer to add the rest.") : summary;
+
+    // OBS reads the list of collections once, when it starts.
+    auto summary = QStringLiteral("Scene written with %1. Start OBS and choose quadcap under "
+                                  "Scene Collection; restart it if it was already open.")
+                       .arg(included.join(QStringLiteral(" + ")));
+    if (included.size() < 3) {
+        summary += QStringLiteral(" Run the installer to add the rest.");
+    }
+    report(true, summary);
 }
 
 bool AppController::obsEnabled() const {
@@ -426,6 +464,8 @@ void AppController::refreshDevice() {
     using quadcap::device::DeviceState;
 
     pipeline_.stop();
+    // Refresh is the explicit "try again", so a previous failure stops standing in the way.
+    autoStartBlocked_ = false;
     emit capturingChanged();
 
     // Cheap sysfs reads; re-run on every refresh so the guide reflects what the machine looks like
@@ -598,7 +638,12 @@ void AppController::applyStatus(const quadcap::device::DeviceStatus &status) {
 
     // The signal locking is the cue to start capturing, wherever it came from: an EDID bounce
     // settling, the console being switched on, or a resolution change on the console's side.
-    if (initialized_ && !suspendAutoStart_ && !pipeline_.isRunning() &&
+    // Losing the signal is a clean slate: whatever was wrong last time may not be next time.
+    if (status_.state != quadcap::device::DeviceState::Locked) {
+        autoStartBlocked_ = false;
+    }
+
+    if (initialized_ && !suspendAutoStart_ && !autoStartBlocked_ && !pipeline_.isRunning() &&
         status_.state == quadcap::device::DeviceState::Locked) {
         startPipeline();
     }
