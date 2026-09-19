@@ -116,6 +116,28 @@ jobs:
         env:
           VERSION: ${{ inputs.version }}
         run: packaging/make-release.sh "${VERSION}" build-release release-driver dist
+      - name: Build the Debian package
+        run: |
+          # The .deb is staged from a build tree configured without tests so the package carries
+          # only what it installs.
+          cmake -S . -B build-package -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
+          cmake --build build-package --parallel 2
+          (cd build-package && cpack -G DEB)
+          # quadcap links Qt's QML private ABI, so dpkg-shlibdeps pins the package to the exact Qt
+          # patch release it was built against. Naming the distribution keeps that visible rather
+          # than letting someone discover it from a dependency error.
+          for deb in build-package/*.deb; do
+            mv "${deb}" "dist/$(basename "${deb}" .deb)-ubuntu24.04.deb"
+          done
+      - name: Check the Debian package
+        run: |
+          sudo apt-get install --yes --no-install-recommends lintian
+          dpkg-deb -I dist/*.deb
+          # Errors fail the build. Lintian's style warnings target archive submissions and are not
+          # worth carrying overrides for in a package distributed from a release page.
+          lintian --fail-on error dist/*.deb
+      - name: Build the AppImage
+        run: packaging/make-appimage.sh build-package dist
       - name: Build release notes
         env:
           VERSION: ${{ inputs.version }}
@@ -137,6 +159,16 @@ jobs:
             echo "- Unit and integration tests passed"
             echo "- Formatting, ShellCheck, Cppcheck, and QML checks passed"
             echo "- The archive checksum is attached beside the bundle"
+            echo
+            echo "## Downloads"
+            echo
+            echo "- \`quadcap-${VERSION}-x86_64.AppImage\` runs on any recent distribution and"
+            echo "  bundles Qt and GStreamer. Still needs the sc0710 driver installed."
+            echo "- \`quadcap_${VERSION}_amd64-ubuntu24.04.deb\` for Ubuntu 24.04. quadcap links"
+            echo "  Qt's QML private ABI, so this package will not install against another Qt"
+            echo "  patch release; use the AppImage or build from source elsewhere."
+            echo "- \`quadcap-${VERSION}-linux-x86_64.tar.xz\` carries the source, the pinned"
+            echo "  driver, and packaging/install.sh, which sets up DKMS and Secure Boot signing."
           } >dist/RELEASE_NOTES.md
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
@@ -167,6 +199,7 @@ jobs:
         # rerun of this job harmless: the assets are replaced, not duplicated.
         run: |
           archive="dist/quadcap-${VERSION}-linux-x86_64.tar.xz"
+          mapfile -t extras < <(find dist -maxdepth 1 \( -name '*.deb' -o -name '*.AppImage' -o -name '*.AppImage.sha256' \))
           if gh release view "v${VERSION}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
             gh release edit "v${VERSION}" \
               --repo "${GITHUB_REPOSITORY}" \
@@ -175,11 +208,11 @@ jobs:
               --notes-file dist/RELEASE_NOTES.md \
               --draft=false
             gh release upload "v${VERSION}" \
-              "${archive}" "${archive}.sha256" \
+              "${archive}" "${archive}.sha256" "${extras[@]}" \
               --repo "${GITHUB_REPOSITORY}" --clobber
           else
             gh release create "v${VERSION}" \
-              "${archive}" "${archive}.sha256" \
+              "${archive}" "${archive}.sha256" "${extras[@]}" \
               --repo "${GITHUB_REPOSITORY}" \
               --target "${COMMIT}" \
               --title "quadcap ${VERSION}" \

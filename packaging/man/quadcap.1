@@ -1,0 +1,29 @@
+.TH QUADCAP 1 "2026" "quadcap" "User Commands"
+.SH NAME
+quadcap \- record a games console through an Elgato 4K60 Pro MK.2
+.SH SYNOPSIS
+.B quadcap
+.SH DESCRIPTION
+.B quadcap
+opens a window showing the console attached to the capture card and records it
+while the card passes the picture through to a monitor untouched.
+.PP
+The preview is uploaded to the GPU and shown at capture rate. A rolling
+flashback buffer is kept on disk, so the last few minutes can be written out
+after something worth keeping has already happened. Recordings carry the game
+audio and the microphone as separate tracks alongside a mixed one, and the
+mixer in the window sets the levels of the mixed track only, leaving the
+isolated tracks raw.
+.PP
+Only one instance runs at a time: the sound device is opened exclusively, so a
+second copy would take the audio away from the first. Starting quadcap again
+raises the window that is already open.
+.SH FILES
+.TP
+.I ~/Videos/quadcap
+Recordings and saved flashback clips.
+.TP
+.I /usr/share/quadcap/install.sh
+Installs the sc0710 kernel module through DKMS, signing it for Secure Boot.
+.SH SEE ALSO
+.BR quadcapd (1)

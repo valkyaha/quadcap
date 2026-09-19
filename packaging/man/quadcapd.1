@@ -1,0 +1,41 @@
+.TH QUADCAPD 1 "2026" "quadcap" "User Commands"
+.SH NAME
+quadcapd \- inspect and control an Elgato 4K60 Pro MK.2 from the terminal
+.SH SYNOPSIS
+.B quadcapd
+[\fIOPTION\fR]...
+.SH DESCRIPTION
+.B quadcapd
+reports what the capture card sees and records from it without opening a
+window. It is the way to check a signal over SSH, and the way to script a
+capture.
+.SH OPTIONS
+.TP
+.B \-\-status
+Print the card, the device node, and the signal currently locked.
+.TP
+.B \-\-watch
+Keep printing as the signal changes.
+.TP
+.B \-\-json
+Emit the status as JSON rather than text.
+.TP
+.B \-\-get\-edid
+Write the EDID the card presents to the console to standard output.
+.TP
+.B \-\-set\-edid " " \fIFILE\fR
+Load an EDID into the card. The MK.2 holds this in its MCU, so it is lost on
+a power cycle and has to be written again at boot.
+.TP
+.B \-\-edid\-source " " \fISOURCE\fR
+Choose whether the card presents its internal EDID, the attached display's, or
+a merge of the two.
+.TP
+.B \-\-setup
+Report whether the driver is installed, loaded, and signed.
+.TP
+.B \-\-record " " \fIFILE\fR
+Record to \fIFILE\fR. Combine with \fB\-\-seconds\fR, \fB\-\-width\fR,
+\fB\-\-height\fR, \fB\-\-fps\fR, and \fB\-\-software\fR.
+.SH SEE ALSO
+.BR quadcap (1)
