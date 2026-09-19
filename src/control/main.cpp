@@ -4,6 +4,7 @@
 #include "device/SystemCheck.h"
 #include "obs/ObsScene.h"
 #include "pipeline/CapturePipeline.h"
+#include "pipeline/ObsVideoOutput.h"
 
 #include <QCommandLineOption>
 #include <QCommandLineParser>
@@ -100,9 +101,15 @@ int recordForSeconds(const DeviceStatus &status, const QString &path, const int 
     config.hardwareEncoder = hardwareEncoder;
     config.enablePreview = false;
     config.gameAudioDevice = quadcap::device::DeviceDiscovery::alsaDeviceForPci(status.pciAddress);
+    quadcap::pipeline::ObsVideoOutput obsVideo;
     config.enableObsOutput = obsOutput;
     if (obsOutput) {
-        config.obsVideoDevice = quadcap::device::DeviceDiscovery::obsLoopbackDevice();
+        const auto node = quadcap::device::DeviceDiscovery::obsLoopbackDevice();
+        QString obsError;
+        if (!obsVideo.start(node, 1920, 1080, 60, &obsError)) {
+            err << "OBS video output unavailable: " << obsError << Qt::endl;
+        }
+        config.obsOutput = &obsVideo;
         config.obsGameSink = QStringLiteral("quadcap-game");
         config.obsMicSink = QStringLiteral("quadcap-mic");
     }

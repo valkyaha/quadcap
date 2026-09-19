@@ -4,6 +4,7 @@
 #include <QFileInfo>
 #include <QMetaObject>
 
+#include <gst/app/gstappsink.h>
 #include <gst/video/video-event.h>
 
 #include <cmath>
@@ -727,58 +728,40 @@ bool CapturePipeline::audioSinkExists(const QString &name) {
 }
 
 void CapturePipeline::buildObsVideo(GstElement *rawTee) {
-    if (config_.obsVideoDevice.isEmpty()) {
+    if (!config_.obsOutput || !config_.obsOutput->isRunning()) {
         noteObsProblem(
             QStringLiteral("No v4l2loopback device for video; install v4l2loopback-dkms"));
         return;
     }
 
-    const int width = config_.obsWidth > 0 ? config_.obsWidth : config_.width;
-    const int height = config_.obsHeight > 0 ? config_.obsHeight : config_.height;
-
+    ObsVideoOutput *output = config_.obsOutput;
     GstElement *queue = makeLeakyQueue("obs-video-queue");
     GstElement *convert = gst_element_factory_make("videoconvert", "obs-convert");
     GstElement *scale = gst_element_factory_make("videoscale", "obs-scale");
+    GstElement *rate = gst_element_factory_make("videorate", "obs-rate");
     GstElement *caps = gst_element_factory_make("capsfilter", "obs-caps");
-    GstElement *sink = gst_element_factory_make("v4l2sink", "obs-video-sink");
-    if (!queue || !convert || !scale || !caps || !sink) {
+    GstElement *sink = gst_element_factory_make("appsink", "obs-video-sink");
+    if (!queue || !convert || !scale || !rate || !caps || !sink) {
         gst_clear_object(&queue);
         gst_clear_object(&convert);
         gst_clear_object(&scale);
+        gst_clear_object(&rate);
         gst_clear_object(&caps);
         gst_clear_object(&sink);
         noteObsProblem(QStringLiteral("Could not build the OBS video branch"));
         return;
     }
 
-    const auto device = QFile::encodeName(config_.obsVideoDevice);
-    // YUY2 rather than the cheaper NV12. OBS reads v4l2 through libv4l2, which refuses NV12 from a
-    // loopback node: the source fails to initialise with "Selected video format not supported" and
-    // the scene comes up with a black camera. YUY2 costs a third more bandwidth and works.
-    g_object_set(sink, "device", device.constData(), "sync", FALSE, nullptr);
-    if (g_object_class_find_property(G_OBJECT_GET_CLASS(sink), "provide-clock")) {
-        g_object_set(sink, "provide-clock", FALSE, nullptr);
-    }
-    const auto wanted = QStringLiteral("video/x-raw,format=YUY2,width=%1,height=%2")
-                            .arg(width)
-                            .arg(height)
-                            .toLatin1();
-    GstCaps *filter = gst_caps_from_string(wanted.constData());
-    g_object_set(caps, "caps", filter, nullptr);
-    gst_caps_unref(filter);
+    // Scaled and paced into the geometry the output already opened the node with. The node's
+    // format must not change underneath OBS, so capture is fitted to it rather than the reverse.
+    GstCaps *wanted = gst_caps_from_string(output->requiredCaps().toLatin1().constData());
+    g_object_set(caps, "caps", wanted, nullptr);
+    gst_caps_unref(wanted);
 
-    if (!canOpenSource(sink)) {
-        gst_object_unref(queue);
-        gst_object_unref(convert);
-        gst_object_unref(scale);
-        gst_object_unref(caps);
-        gst_object_unref(sink);
-        noteObsProblem(
-            QStringLiteral("%1 could not be opened for writing").arg(config_.obsVideoDevice));
-        return;
-    }
+    g_object_set(sink, "emit-signals", FALSE, "sync", FALSE, "max-buffers", 2u, "drop", TRUE,
+                 nullptr);
 
-    gst_bin_add_many(GST_BIN(pipeline_), queue, convert, scale, caps, sink, nullptr);
+    gst_bin_add_many(GST_BIN(pipeline_), queue, convert, scale, rate, caps, sink, nullptr);
 
     bool linked = false;
     if (config_.hardwareEncoder && !config_.testSource) {
@@ -787,16 +770,30 @@ void CapturePipeline::buildObsVideo(GstElement *rawTee) {
         GstElement *download = gst_element_factory_make("gldownload", "obs-download");
         if (download) {
             gst_bin_add(GST_BIN(pipeline_), download);
-            linked = linkAll({rawTee, queue, download, convert, scale, caps, sink});
+            linked = linkAll({rawTee, queue, download, convert, scale, rate, caps, sink});
         }
     } else {
-        linked = linkAll({rawTee, queue, convert, scale, caps, sink});
+        linked = linkAll({rawTee, queue, convert, scale, rate, caps, sink});
     }
 
     if (!linked) {
         noteObsProblem(QStringLiteral("Could not link the OBS video branch"));
         return;
     }
+
+    GstAppSinkCallbacks callbacks{};
+    callbacks.new_sample = [](GstAppSink *appsink, gpointer userData) -> GstFlowReturn {
+        GstSample *sample = gst_app_sink_pull_sample(appsink);
+        if (!sample) {
+            return GST_FLOW_OK;
+        }
+        if (GstBuffer *buffer = gst_sample_get_buffer(sample)) {
+            static_cast<ObsVideoOutput *>(userData)->submitFrame(buffer);
+        }
+        gst_sample_unref(sample);
+        return GST_FLOW_OK;
+    };
+    gst_app_sink_set_callbacks(GST_APP_SINK(sink), &callbacks, output, nullptr);
     obsVideoLive_ = true;
 }
 

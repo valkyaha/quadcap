@@ -7,6 +7,8 @@
 #include <QTimer>
 #include <QVector>
 
+#include "pipeline/ObsVideoOutput.h"
+
 #include <gst/gst.h>
 
 namespace quadcap::pipeline {
@@ -40,14 +42,17 @@ struct PipelineConfig {
      * can be levelled, ducked and filtered independently.
      */
     bool enableObsOutput = false;
-    //! v4l2loopback node, e.g. "/dev/video10". Empty leaves the video leg out.
-    QString obsVideoDevice;
+    /*!
+     * Where captured frames go for OBS to read.
+     *
+     * Not a device path: the node is held open by an ObsVideoOutput that outlives any one capture
+     * pipeline, so the camera does not disappear from OBS when the console sleeps. Null leaves the
+     * video leg out.
+     */
+    ObsVideoOutput *obsOutput = nullptr;
     //! PipeWire sink carrying console audio. OBS captures its monitor. Empty leaves it out.
     QString obsGameSink;
     QString obsMicSink;
-    //! Geometry sent to OBS. Zero matches the capture size.
-    int obsWidth = 0;
-    int obsHeight = 0;
 };
 
 /*!

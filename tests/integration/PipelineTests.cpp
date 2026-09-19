@@ -1,4 +1,5 @@
 #include "pipeline/CapturePipeline.h"
+#include "pipeline/ObsVideoOutput.h"
 
 #include <QDir>
 #include <QSet>
@@ -212,8 +213,9 @@ class PipelineTests final : public QObject {
         config.captureMic = true;
         config.enableObsOutput = true;
         // Nothing is listening on any of these. Someone without v4l2loopback installed, or before
-        // the PipeWire sinks exist, is the common case, and it must cost them nothing.
-        config.obsVideoDevice = QStringLiteral("/dev/video99");
+        // the PipeWire sinks exist, is the common case, and it must cost them nothing. A null
+        // output stands in for a loopback node that was never opened.
+        config.obsOutput = nullptr;
         config.obsGameSink = QStringLiteral("quadcap-game-absent");
         config.obsMicSink = QStringLiteral("quadcap-mic-absent");
 
@@ -235,6 +237,21 @@ class PipelineTests final : public QObject {
 
         QCOMPARE(errors.count(), 0);
         QVERIFY(QFileInfo(recording).size() > 1024);
+    }
+
+    void keepsTheLoopbackOpenWithNoCaptureRunning() {
+        // The point of the separate output: OBS must keep seeing a camera while the console is
+        // asleep, so the node has to stay open and keep receiving frames with no pipeline at all.
+        quadcap::pipeline::ObsVideoOutput output;
+        QString error;
+        if (!output.start(QStringLiteral("/dev/video99"), 320, 180, 30, &error)) {
+            QVERIFY2(!error.isEmpty(), "a refused device must say why");
+        }
+        QVERIFY2(!output.isRunning(), "a device that cannot be opened must not report as running");
+
+        // Submitting to a stopped output is what a capture pipeline outliving it looks like.
+        output.submitFrame(nullptr);
+        output.stop();
     }
 
     void leavesTheObsRouteAloneWhenItIsOff() {

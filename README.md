@@ -78,6 +78,12 @@ quadcapd --record out.mkv --obs  # record and feed OBS at the same time
 The scene names only the device and its input, leaving OBS to detect format, resolution and frame
 rate, so it keeps working when the console changes mode.
 
+The virtual camera stays present in OBS whether or not a console is awake. quadcap holds the device
+open for as long as the switch is on and writes black when nothing is being captured, so a console
+going into standby shows as a black camera rather than a source OBS drops and will not pick up
+again by itself. The camera runs at 1080p60 regardless of the capture resolution, because changing
+its format underneath OBS would drop the source just as surely.
+
 ## Requirements
 
 - Linux, kernel 6.12 or newer

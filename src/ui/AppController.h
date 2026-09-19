@@ -4,6 +4,7 @@
 #include "device/SystemCheck.h"
 #include "flashback/FlashbackRing.h"
 #include "pipeline/CapturePipeline.h"
+#include "pipeline/ObsVideoOutput.h"
 
 #include <QObject>
 #include <QTimer>
@@ -145,6 +146,14 @@ class AppController final : public QObject {
     [[nodiscard]] bool applyEdidSource();
     void startPipeline();
     void applyAudioMix();
+
+    /*!
+     * Brings the loopback writer up or down to match the switch.
+     *
+     * Kept out of startPipeline because it must not follow the signal: the whole point is that the
+     * camera stays in OBS while the console is asleep.
+     */
+    void applyObsOutput();
     void noteAudioLevel(const QString &source, double rmsDb, double peakDb);
     void setError(const QString &error);
     void updateElapsed();
@@ -153,6 +162,8 @@ class AppController final : public QObject {
 
     quadcap::device::CaptureDevice device_;
     quadcap::pipeline::CapturePipeline pipeline_;
+    //! Holds the loopback node open for as long as OBS output is on, across pipeline rebuilds.
+    quadcap::pipeline::ObsVideoOutput obsOutput_;
     quadcap::flashback::FlashbackRing flashback_;
     quadcap::device::DeviceStatus status_;
     quadcap::device::SetupStatus setup_;

@@ -287,6 +287,7 @@ void AppController::setObsEnabled(const bool enabled) {
     }
     obsEnabled_ = enabled;
     QSettings().setValue(QStringLiteral("obs/enabled"), obsEnabled_);
+    applyObsOutput();
     emit obsChanged();
     // The branches are part of the graph, so the route can only change by building it again.
     if (pipeline_.isRunning() && !pipeline_.isRecording()) {
@@ -378,6 +379,9 @@ void AppController::initialize(QObject *previewItem) {
     }
     initialized_ = true;
     pipeline_.setPreviewItem(previewItem);
+    // Before the device is looked at: with the switch left on, OBS should find the camera waiting
+    // whether or not a console is awake.
+    applyObsOutput();
     refreshDevice();
     updateDisk();
     diskTimer_.start();
@@ -486,6 +490,37 @@ bool AppController::applyEdidSource() {
     return true;
 }
 
+void AppController::applyObsOutput() {
+    if (!obsEnabled_) {
+        obsOutput_.stop();
+        return;
+    }
+    if (obsOutput_.isRunning()) {
+        return;
+    }
+
+    // Located by card label for the same reason the capture node is: the numbering is not ours to
+    // rely on, and a fixed path could mean writing into the capture card.
+    const auto device = quadcap::device::DeviceDiscovery::obsLoopbackDevice();
+    if (device.isEmpty()) {
+        return; // Reported through obsNotice once a pipeline is built.
+    }
+
+    /*
+     * 1080p60 regardless of what the console is doing.
+     *
+     * The node's format is fixed once OBS has opened it, so this cannot follow the signal: a
+     * console switching to 4K would otherwise change the camera underneath OBS and drop the
+     * source, which is the failure this whole arrangement exists to avoid. Capture is scaled into
+     * it. 4K60 raw over a loopback is also about a gigabyte a second, which is a lot to spend on a
+     * stream that will be encoded at a lower resolution anyway.
+     */
+    QString error;
+    if (!obsOutput_.start(device, 1920, 1080, 60, &error)) {
+        setError(error);
+    }
+}
+
 void AppController::startPipeline() {
     quadcap::pipeline::PipelineConfig config;
     config.devicePath = status_.deviceNode;
@@ -515,9 +550,7 @@ void AppController::startPipeline() {
 
     config.enableObsOutput = obsEnabled_;
     if (obsEnabled_) {
-        // Located by card label for the same reason the capture node is: the numbering is not ours
-        // to rely on.
-        config.obsVideoDevice = quadcap::device::DeviceDiscovery::obsLoopbackDevice();
+        config.obsOutput = &obsOutput_;
         config.obsGameSink = QStringLiteral("quadcap-game");
         config.obsMicSink = QStringLiteral("quadcap-mic");
     }

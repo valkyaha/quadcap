@@ -13,6 +13,7 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(GSTREAMER REQUIRED IMPORTED_TARGET
     gstreamer-1.0>=1.22
     gstreamer-video-1.0>=1.22
+    gstreamer-app-1.0>=1.22
 )
 
 add_library(quadcap_device
@@ -32,6 +33,8 @@ target_compile_options(quadcap_device PRIVATE -Wall -Wextra -Wpedantic)
 add_library(quadcap_pipeline
     src/pipeline/CapturePipeline.cpp
     src/pipeline/CapturePipeline.h
+    src/pipeline/ObsVideoOutput.cpp
+    src/pipeline/ObsVideoOutput.h
 )
 target_include_directories(quadcap_pipeline PUBLIC src)
 target_link_libraries(quadcap_pipeline PUBLIC Qt6::Core PkgConfig::GSTREAMER)
