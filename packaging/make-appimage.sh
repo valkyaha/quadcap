@@ -61,11 +61,19 @@ export DEPLOY_GSTREAMER_INCLUDE_BAD_PLUGINS=1
 QT_PLUGIN_DIR="$(qtpaths6 --query QT_INSTALL_PLUGINS 2>/dev/null || qmake6 -query QT_INSTALL_PLUGINS)"
 QT_PLATFORM_DIR="${QT_PLUGIN_DIR}/platforms"
 EXTRA_PLATFORM_PLUGINS="libqoffscreen.so"
+wayland_found=0
 for candidate in libqwayland.so libqwayland-generic.so libqwayland-egl.so; do
   if [[ -f "${QT_PLATFORM_DIR}/${candidate}" ]]; then
     EXTRA_PLATFORM_PLUGINS="${EXTRA_PLATFORM_PLUGINS};${candidate}"
+    wayland_found=1
   fi
 done
+# Skipping this quietly is how an AppImage ends up xcb-only: it still runs, through XWayland, and
+# nothing about the build says otherwise. Install qt6-wayland on the build host.
+if [[ "${wayland_found}" -eq 0 ]]; then
+  echo "no Qt Wayland platform plugin in ${QT_PLATFORM_DIR}; install qt6-wayland" >&2
+  exit 1
+fi
 export EXTRA_PLATFORM_PLUGINS
 export EXTRA_QT_PLUGINS="wayland-decoration-client;wayland-graphics-integration-client;wayland-shell-integration"
 export LD_LIBRARY_PATH="${APPDIR}/usr/lib:${LD_LIBRARY_PATH:-}"

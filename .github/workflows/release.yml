@@ -72,7 +72,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends \
             clang-format cmake cppcheck git ninja-build pkg-config shellcheck xz-utils \
-            qt6-base-dev qt6-declarative-dev \
+            qt6-base-dev qt6-declarative-dev qt6-wayland \
             qml6-module-qtqml qml6-module-qtqml-models qml6-module-qtqml-workerscript \
             qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts \
             qml6-module-qtquick-templates qml6-module-qtquick-window \
@@ -138,6 +138,8 @@ jobs:
           lintian --fail-on error dist/*.deb
       - name: Build the AppImage
         run: packaging/make-appimage.sh build-package dist
+      - name: Checksum the Debian package
+        run: (cd dist && for deb in *.deb; do sha256sum "${deb}" >"${deb}.sha256"; done)
       - name: Build release notes
         env:
           VERSION: ${{ inputs.version }}
@@ -199,7 +201,7 @@ jobs:
         # rerun of this job harmless: the assets are replaced, not duplicated.
         run: |
           archive="dist/quadcap-${VERSION}-linux-x86_64.tar.xz"
-          mapfile -t extras < <(find dist -maxdepth 1 \( -name '*.deb' -o -name '*.AppImage' -o -name '*.AppImage.sha256' \))
+          mapfile -t extras < <(find dist -maxdepth 1 \( -name '*.deb' -o -name '*.deb.sha256' -o -name '*.AppImage' -o -name '*.AppImage.sha256' \))
           if gh release view "v${VERSION}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
             gh release edit "v${VERSION}" \
               --repo "${GITHUB_REPOSITORY}" \
