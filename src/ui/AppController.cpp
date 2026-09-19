@@ -45,6 +45,9 @@ AppController::AppController(QObject *parent)
         qBound(-40.0, settings.value(QStringLiteral("audio/micGainDb"), 0.0).toDouble(), 12.0);
     gameMuted_ = settings.value(QStringLiteral("audio/gameMuted"), false).toBool();
     micMuted_ = settings.value(QStringLiteral("audio/micMuted"), false).toBool();
+    // Off unless it was deliberately switched on: the OBS branches cost frames to produce and most
+    // sessions are not streaming.
+    obsEnabled_ = settings.value(QStringLiteral("obs/enabled"), false).toBool();
 
     connect(&pipeline_, &quadcap::pipeline::CapturePipeline::audioLevel, this,
             &AppController::noteAudioLevel);
@@ -217,6 +220,38 @@ QString AppController::audioSummary() const {
 
 QString AppController::audioNotice() const {
     return pipeline_.audioNotice();
+}
+
+bool AppController::obsEnabled() const {
+    return obsEnabled_;
+}
+
+QString AppController::obsStatus() const {
+    if (!obsEnabled_) {
+        return QStringLiteral("Off");
+    }
+    if (!pipeline_.obsActive()) {
+        return QStringLiteral("Unavailable");
+    }
+    return pipeline_.obsNotice().isEmpty() ? QStringLiteral("Sending") : QStringLiteral("Partial");
+}
+
+QString AppController::obsNotice() const {
+    return obsEnabled_ ? pipeline_.obsNotice() : QString();
+}
+
+void AppController::setObsEnabled(const bool enabled) {
+    if (obsEnabled_ == enabled) {
+        return;
+    }
+    obsEnabled_ = enabled;
+    QSettings().setValue(QStringLiteral("obs/enabled"), obsEnabled_);
+    emit obsChanged();
+    // The branches are part of the graph, so the route can only change by building it again.
+    if (pipeline_.isRunning() && !pipeline_.isRecording()) {
+        pipeline_.stop();
+        startPipeline();
+    }
 }
 
 double AppController::gameGainDb() const {
@@ -437,6 +472,15 @@ void AppController::startPipeline() {
     // Found through sysfs by PCI address: the ALSA card index moves when USB audio comes and goes.
     config.gameAudioDevice = quadcap::device::DeviceDiscovery::alsaDeviceForPci(status_.pciAddress);
 
+    config.enableObsOutput = obsEnabled_;
+    if (obsEnabled_) {
+        // Located by card label for the same reason the capture node is: the numbering is not ours
+        // to rely on.
+        config.obsVideoDevice = quadcap::device::DeviceDiscovery::obsLoopbackDevice();
+        config.obsGameSink = QStringLiteral("quadcap-game");
+        config.obsMicSink = QStringLiteral("quadcap-mic");
+    }
+
     // The pipeline starts a fresh ring, so anything recorded about the previous one is stale.
     flashback_.reset();
     flashback_.configure(config.ringDirectory, config.segmentSeconds, config.hardwareEncoder);
@@ -447,6 +491,7 @@ void AppController::startPipeline() {
         setError(pipelineError);
     }
     applyAudioMix();
+    emit obsChanged();
     emit capturingChanged();
 }
 

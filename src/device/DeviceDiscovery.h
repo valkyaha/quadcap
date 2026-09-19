@@ -30,6 +30,18 @@ class DeviceDiscovery final {
      * when USB audio devices come and go. Empty when the card exposes no ALSA node.
      */
     [[nodiscard]] static QString alsaDeviceForPci(const QString &pciAddress);
+
+    //! Card label the installer gives the v4l2loopback node quadcap writes to for OBS.
+    static constexpr auto ObsLoopbackLabel = "quadcap";
+
+    /*!
+     * The v4l2loopback node OBS reads, found by card label rather than by number.
+     *
+     * The capture card is itself a /dev/video node, and which number either one gets depends on
+     * probe order, so writing to a fixed path risks writing into the capture device. Empty when no
+     * loopback with the label exists, which means the module is not installed or not loaded.
+     */
+    [[nodiscard]] static QString obsLoopbackDevice();
 };
 
 } // namespace quadcap::device

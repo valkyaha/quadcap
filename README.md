@@ -41,6 +41,27 @@ Plug a console into the card, play on the passthrough display, and record what y
 Capture itself is handled by the out-of-tree [`sc0710`](https://github.com/Nakildias/sc0710) kernel
 driver, which quadcap installs and configures for you.
 
+## Streaming to OBS
+
+OBS cannot open the capture card while quadcap holds it, so quadcap hands it the signal instead.
+Switch on **Send to OBS** and three sources appear:
+
+| In OBS | Add as | Carries |
+| --- | --- | --- |
+| `quadcap` | Video Capture Device (V4L2) | The picture |
+| Monitor of `quadcap game audio` | Audio Output Capture | Console sound |
+| Monitor of `quadcap microphone` | Audio Output Capture | Your microphone |
+
+The two audio sources are deliberately separate rather than pre-mixed, so the game can be ducked
+under your voice, and the microphone gated or compressed, without either touching the other. The
+faders in quadcap shape only what it records; what OBS receives is unprocessed.
+
+`packaging/install.sh` sets this up: `v4l2loopback` for the virtual camera and two PipeWire null
+sinks for the audio, both configured to survive a reboot. Recording and the preview keep priority —
+the branches feeding OBS drop frames rather than let a slow consumer stall capture.
+
+Headless, `quadcapd --record out.mkv --obs` does the same thing.
+
 ## Requirements
 
 - Linux, kernel 6.12 or newer

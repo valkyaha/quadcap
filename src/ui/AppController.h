@@ -38,6 +38,9 @@ class AppController final : public QObject {
     Q_PROPERTY(double micGainDb READ micGainDb WRITE setMicGainDb NOTIFY audioMixChanged)
     Q_PROPERTY(bool gameMuted READ gameMuted WRITE setGameMuted NOTIFY audioMixChanged)
     Q_PROPERTY(bool micMuted READ micMuted WRITE setMicMuted NOTIFY audioMixChanged)
+    Q_PROPERTY(bool obsEnabled READ obsEnabled WRITE setObsEnabled NOTIFY obsChanged)
+    Q_PROPERTY(QString obsStatus READ obsStatus NOTIFY obsChanged)
+    Q_PROPERTY(QString obsNotice READ obsNotice NOTIFY obsChanged)
     Q_PROPERTY(double gameLevel READ gameLevel NOTIFY audioLevelsChanged)
     Q_PROPERTY(double micLevel READ micLevel NOTIFY audioLevelsChanged)
 
@@ -80,6 +83,16 @@ class AppController final : public QObject {
     [[nodiscard]] bool gameMuted() const;
     [[nodiscard]] bool micMuted() const;
 
+    [[nodiscard]] bool obsEnabled() const;
+
+    //! What OBS is being sent right now, e.g. "video + game + mic".
+    [[nodiscard]] QString obsStatus() const;
+
+    //! Why part of the OBS route is not running, so a missing source in OBS has an explanation.
+    [[nodiscard]] QString obsNotice() const;
+
+    void setObsEnabled(bool enabled);
+
     [[nodiscard]] double gameLevel() const;
     [[nodiscard]] double micLevel() const;
 
@@ -110,6 +123,7 @@ class AppController final : public QObject {
     void setupChanged();
     void audioMixChanged();
     void audioLevelsChanged();
+    void obsChanged();
 
   private:
     void applyStatus(const quadcap::device::DeviceStatus &status);
@@ -143,6 +157,7 @@ class AppController final : public QObject {
     QTimer meterTimer_;
     double gameGainDb_ = 0.0;
     double micGainDb_ = 0.0;
+    bool obsEnabled_ = false;
     bool gameMuted_ = false;
     bool micMuted_ = false;
     double gameLevel_ = 0.0;

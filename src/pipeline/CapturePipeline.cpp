@@ -635,6 +635,12 @@ bool CapturePipeline::build(QString *error) {
         }
         return false;
     }
+
+    // Built last, off the same raw tee the preview and the encoder use, and never fatal: OBS not
+    // being reachable is not a reason to stop capturing.
+    if (config_.enableObsOutput) {
+        buildObsVideo(rawTee);
+    }
     return true;
 }
 
@@ -653,6 +659,199 @@ bool CapturePipeline::canOpenSource(GstElement *element) {
 
 QString CapturePipeline::audioNotice() const {
     return audioNotice_;
+}
+
+QString CapturePipeline::obsNotice() const {
+    return obsNotice_;
+}
+
+bool CapturePipeline::obsActive() const {
+    return obsVideoLive_ || obsAudioLive_ > 0;
+}
+
+void CapturePipeline::noteObsProblem(const QString &note) {
+    obsNotice_ = obsNotice_.isEmpty() ? note : obsNotice_ + QStringLiteral("; ") + note;
+}
+
+/*
+ * The OBS branches all start with a leaky queue. OBS is a separate process that can be paused,
+ * dragged around, or simply slow, and without a leak that backpressure would travel up the tee and
+ * stall the recording and the preview with it. Dropping frames on the route to OBS is the correct
+ * trade: the recording is the artefact that matters.
+ */
+namespace {
+GstElement *makeLeakyQueue(const char *name) {
+    GstElement *queue = gst_element_factory_make("queue", name);
+    if (queue) {
+        g_object_set(queue, "leaky", 2 /* downstream */, "max-size-buffers", 4u, "max-size-bytes",
+                     0u, "max-size-time", G_GUINT64_CONSTANT(0), nullptr);
+    }
+    return queue;
+}
+} // namespace
+
+bool CapturePipeline::audioSinkExists(const QString &name) {
+    if (name.isEmpty()) {
+        return false;
+    }
+    initializeGStreamer();
+    GstDeviceMonitor *monitor = gst_device_monitor_new();
+    gst_device_monitor_add_filter(monitor, "Audio/Sink", nullptr);
+    if (!gst_device_monitor_start(monitor)) {
+        gst_object_unref(monitor);
+        return false;
+    }
+
+    GList *devices = gst_device_monitor_get_devices(monitor);
+    bool found = false;
+    for (GList *it = devices; it != nullptr && !found; it = it->next) {
+        GstStructure *properties = gst_device_get_properties(GST_DEVICE_CAST(it->data));
+        if (!properties) {
+            continue;
+        }
+        // PipeWire publishes node.name; the PulseAudio provider uses device.name for the same
+        // thing, and pulsesink's device property accepts either spelling.
+        for (const char *key : {"node.name", "device.name"}) {
+            const gchar *value = gst_structure_get_string(properties, key);
+            if (value && name == QString::fromUtf8(value)) {
+                found = true;
+                break;
+            }
+        }
+        gst_structure_free(properties);
+    }
+    g_list_free_full(devices, gst_object_unref);
+    gst_device_monitor_stop(monitor);
+    gst_object_unref(monitor);
+    return found;
+}
+
+void CapturePipeline::buildObsVideo(GstElement *rawTee) {
+    if (config_.obsVideoDevice.isEmpty()) {
+        noteObsProblem(
+            QStringLiteral("No v4l2loopback device for video; install v4l2loopback-dkms"));
+        return;
+    }
+
+    const int width = config_.obsWidth > 0 ? config_.obsWidth : config_.width;
+    const int height = config_.obsHeight > 0 ? config_.obsHeight : config_.height;
+
+    GstElement *queue = makeLeakyQueue("obs-video-queue");
+    GstElement *convert = gst_element_factory_make("videoconvert", "obs-convert");
+    GstElement *scale = gst_element_factory_make("videoscale", "obs-scale");
+    GstElement *caps = gst_element_factory_make("capsfilter", "obs-caps");
+    GstElement *sink = gst_element_factory_make("v4l2sink", "obs-video-sink");
+    if (!queue || !convert || !scale || !caps || !sink) {
+        gst_clear_object(&queue);
+        gst_clear_object(&convert);
+        gst_clear_object(&scale);
+        gst_clear_object(&caps);
+        gst_clear_object(&sink);
+        noteObsProblem(QStringLiteral("Could not build the OBS video branch"));
+        return;
+    }
+
+    const auto device = QFile::encodeName(config_.obsVideoDevice);
+    // OBS reads whatever the loopback advertises; NV12 is half the bytes of a packed RGB frame,
+    // which at 4K60 is the difference between a copy that keeps up and one that does not.
+    g_object_set(sink, "device", device.constData(), "sync", FALSE, nullptr);
+    if (g_object_class_find_property(G_OBJECT_GET_CLASS(sink), "provide-clock")) {
+        g_object_set(sink, "provide-clock", FALSE, nullptr);
+    }
+    const auto wanted = QStringLiteral("video/x-raw,format=NV12,width=%1,height=%2")
+                            .arg(width)
+                            .arg(height)
+                            .toLatin1();
+    GstCaps *filter = gst_caps_from_string(wanted.constData());
+    g_object_set(caps, "caps", filter, nullptr);
+    gst_caps_unref(filter);
+
+    if (!canOpenSource(sink)) {
+        gst_object_unref(queue);
+        gst_object_unref(convert);
+        gst_object_unref(scale);
+        gst_object_unref(caps);
+        gst_object_unref(sink);
+        noteObsProblem(
+            QStringLiteral("%1 could not be opened for writing").arg(config_.obsVideoDevice));
+        return;
+    }
+
+    gst_bin_add_many(GST_BIN(pipeline_), queue, convert, scale, caps, sink, nullptr);
+
+    bool linked = false;
+    if (config_.hardwareEncoder && !config_.testSource) {
+        // The raw tee carries GL memory on the GPU path, so the frame comes back to system memory
+        // before the colour conversion rather than being converted twice.
+        GstElement *download = gst_element_factory_make("gldownload", "obs-download");
+        if (download) {
+            gst_bin_add(GST_BIN(pipeline_), download);
+            linked = linkAll({rawTee, queue, download, convert, scale, caps, sink});
+        }
+    } else {
+        linked = linkAll({rawTee, queue, convert, scale, caps, sink});
+    }
+
+    if (!linked) {
+        noteObsProblem(QStringLiteral("Could not link the OBS video branch"));
+        return;
+    }
+    obsVideoLive_ = true;
+}
+
+void CapturePipeline::attachObsAudio(GstElement *tee, const QString &sink, const char *label) {
+    if (!tee || sink.isEmpty()) {
+        return;
+    }
+    if (!audioSinkExists(sink)) {
+        noteObsProblem(
+            QStringLiteral("OBS sink %1 does not exist; run the installer to create it").arg(sink));
+        return;
+    }
+
+    const auto named = [label](const char *suffix) {
+        return QStringLiteral("obs-%1-%2")
+            .arg(QLatin1String(label), QLatin1String(suffix))
+            .toLatin1();
+    };
+    GstElement *queue = makeLeakyQueue(named("queue").constData());
+    GstElement *convert = gst_element_factory_make("audioconvert", named("convert").constData());
+    GstElement *resample = gst_element_factory_make("audioresample", named("resample").constData());
+    GstElement *output = gst_element_factory_make("pulsesink", named("sink").constData());
+    if (!queue || !convert || !resample || !output) {
+        gst_clear_object(&queue);
+        gst_clear_object(&convert);
+        gst_clear_object(&resample);
+        gst_clear_object(&output);
+        noteObsProblem(
+            QStringLiteral("Could not build the OBS %1 audio branch").arg(QLatin1String(label)));
+        return;
+    }
+
+    const auto device = sink.toUtf8();
+    g_object_set(output, "device", device.constData(), nullptr);
+    // The capture clock stays master. A sink that offers its own would pull the whole graph onto
+    // the sound server's rate and reintroduce the drift the recording path avoids.
+    if (g_object_class_find_property(G_OBJECT_GET_CLASS(output), "provide-clock")) {
+        g_object_set(output, "provide-clock", FALSE, nullptr);
+    }
+
+    if (!canOpenSource(output)) {
+        gst_object_unref(queue);
+        gst_object_unref(convert);
+        gst_object_unref(resample);
+        gst_object_unref(output);
+        noteObsProblem(QStringLiteral("OBS sink %1 is not available").arg(sink));
+        return;
+    }
+
+    gst_bin_add_many(GST_BIN(pipeline_), queue, convert, resample, output, nullptr);
+    if (!linkAll({tee, queue, convert, resample, output})) {
+        noteObsProblem(
+            QStringLiteral("Could not link the OBS %1 audio branch").arg(QLatin1String(label)));
+        return;
+    }
+    ++obsAudioLive_;
 }
 
 void CapturePipeline::setAudioGainDb(const QString &source, const double decibels) {
@@ -736,6 +935,9 @@ GstElement *CapturePipeline::buildAudioSource(GstElement *source, const char *la
 bool CapturePipeline::buildAudio(GstElement *ringSink, QString *error) {
     audioTracks_.clear();
     audioNotice_.clear();
+    obsNotice_.clear();
+    obsVideoLive_ = false;
+    obsAudioLive_ = 0;
     mixGain_.clear();
     monitorGain_ = nullptr;
     if (!config_.enableAudio) {
@@ -797,6 +999,13 @@ bool CapturePipeline::buildAudio(GstElement *ringSink, QString *error) {
                     audioNotice_.isEmpty() ? note : audioNotice_ + QStringLiteral("; ") + note;
             }
         }
+    }
+
+    // Sent per source rather than from the mix, which is the whole point: OBS gets game and
+    // microphone as two inputs it can level and filter apart from each other.
+    if (config_.enableObsOutput) {
+        attachObsAudio(gameTee, config_.obsGameSink, "game");
+        attachObsAudio(micTee, config_.obsMicSink, "mic");
     }
 
     if (!gameTee && !micTee) {

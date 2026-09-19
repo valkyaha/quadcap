@@ -79,7 +79,7 @@ void printStatus(const DeviceStatus &status, bool json) {
  */
 int recordForSeconds(const DeviceStatus &status, const QString &path, const int seconds,
                      const int width, const int height, const int frameRate,
-                     const bool hardwareEncoder) {
+                     const bool hardwareEncoder, const bool obsOutput) {
     QTextStream out(stdout);
     QTextStream err(stderr);
 
@@ -99,6 +99,12 @@ int recordForSeconds(const DeviceStatus &status, const QString &path, const int 
     config.hardwareEncoder = hardwareEncoder;
     config.enablePreview = false;
     config.gameAudioDevice = quadcap::device::DeviceDiscovery::alsaDeviceForPci(status.pciAddress);
+    config.enableObsOutput = obsOutput;
+    if (obsOutput) {
+        config.obsVideoDevice = quadcap::device::DeviceDiscovery::obsLoopbackDevice();
+        config.obsGameSink = QStringLiteral("quadcap-game");
+        config.obsMicSink = QStringLiteral("quadcap-mic");
+    }
 
     QString failure;
     bool failed = false;
@@ -216,6 +222,8 @@ int main(int argc, char **argv) {
                       QStringLiteral("n"), QStringLiteral("60")});
     parser.addOption(
         {QStringLiteral("software"), QStringLiteral("Use the software encoder and CPU scaling")});
+    parser.addOption(
+        {QStringLiteral("obs"), QStringLiteral("Also send video and each audio source to OBS")});
     parser.process(app);
 
     // Probed once up front: every branch below needs to know whether a card is present, and each
@@ -299,7 +307,8 @@ int main(int argc, char **argv) {
                                 parser.value(QStringLiteral("width")).toInt(),
                                 parser.value(QStringLiteral("height")).toInt(),
                                 parser.value(QStringLiteral("fps")).toInt(),
-                                !parser.isSet(QStringLiteral("software")));
+                                !parser.isSet(QStringLiteral("software")),
+                                parser.isSet(QStringLiteral("obs")));
     }
 
     printStatus(initial, json);

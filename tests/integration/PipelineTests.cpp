@@ -193,6 +193,75 @@ class PipelineTests final : public QObject {
         QVERIFY(QFileInfo(recording).size() > 1024);
     }
 
+    void keepsCapturingWhenTheObsRouteIsUnavailable() {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+
+        CapturePipeline pipeline;
+        QSignalSpy errors(&pipeline, &CapturePipeline::errorOccurred);
+        PipelineConfig config;
+        config.testSource = true;
+        config.hardwareEncoder = false;
+        config.width = 320;
+        config.height = 180;
+        config.frameRate = 30;
+        config.segmentSeconds = 1;
+        config.ringMinutes = 1;
+        config.ringDirectory = temporary.filePath(QStringLiteral("ring"));
+        config.gameAudioDevice = QStringLiteral("test");
+        config.captureMic = true;
+        config.enableObsOutput = true;
+        // Nothing is listening on any of these. Someone without v4l2loopback installed, or before
+        // the PipeWire sinks exist, is the common case, and it must cost them nothing.
+        config.obsVideoDevice = QStringLiteral("/dev/video99");
+        config.obsGameSink = QStringLiteral("quadcap-game-absent");
+        config.obsMicSink = QStringLiteral("quadcap-mic-absent");
+
+        QString error;
+        QVERIFY2(pipeline.start(config, &error), qPrintable(error));
+        QVERIFY(pipeline.isRunning());
+        QVERIFY2(!pipeline.obsActive(),
+                 "nothing was reachable, so nothing should be reported live");
+        QVERIFY2(!pipeline.obsNotice().isEmpty(), "a silent failure would leave OBS empty with no "
+                                                  "explanation");
+
+        // The recording is what must not be affected.
+        const auto recording = temporary.filePath(QStringLiteral("with-obs-down.mkv"));
+        QVERIFY2(pipeline.startRecording(recording, &error), qPrintable(error));
+        QTest::qWait(2000);
+        pipeline.stopRecording();
+        QTRY_VERIFY_WITH_TIMEOUT(!pipeline.isRecording(), 5000);
+        pipeline.stop();
+
+        QCOMPARE(errors.count(), 0);
+        QVERIFY(QFileInfo(recording).size() > 1024);
+    }
+
+    void leavesTheObsRouteAloneWhenItIsOff() {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+
+        CapturePipeline pipeline;
+        PipelineConfig config;
+        config.testSource = true;
+        config.hardwareEncoder = false;
+        config.width = 320;
+        config.height = 180;
+        config.frameRate = 30;
+        config.segmentSeconds = 1;
+        config.ringMinutes = 1;
+        config.ringDirectory = temporary.filePath(QStringLiteral("ring"));
+        config.gameAudioDevice = QStringLiteral("test");
+
+        QString error;
+        QVERIFY2(pipeline.start(config, &error), qPrintable(error));
+        QVERIFY(!pipeline.obsActive());
+        // Switched off is not a problem worth reporting; only a failed attempt is.
+        QVERIFY2(pipeline.obsNotice().isEmpty(),
+                 "an untouched OBS route must not produce a warning");
+        pipeline.stop();
+    }
+
     void keepsCapturingWhenNoAudioSourceExists() {
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());

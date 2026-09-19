@@ -471,6 +471,68 @@ ApplicationWindow {
                 ColumnLayout {
                     anchors.fill: parent
                     anchors.margins: 18
+                    spacing: 6
+
+                    RowLayout {
+                        LabelSmall { text: "OBS OUTPUT" }
+                        Item { Layout.fillWidth: true }
+                        Text {
+                            text: appController.obsStatus
+                            color: appController.obsStatus === "Sending" ? "#7ee081"
+                                 : appController.obsStatus === "Partial" ? "#e0c07e"
+                                 : appController.obsStatus === "Unavailable" ? "#ffb9bf"
+                                 : "#5b6572"
+                            font.pixelSize: 10
+                        }
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: "Sends the picture to a virtual camera and each audio source to its "
+                            + "own sink, so OBS can mix game and mic apart."
+                        color: "#5b6572"
+                        font.pixelSize: 9
+                        wrapMode: Text.WordWrap
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+
+                        Button {
+                            id: obsButton
+                            text: appController.obsEnabled ? "Stop sending" : "Send to OBS"
+                            implicitHeight: 26
+                            onClicked: appController.obsEnabled = !appController.obsEnabled
+                            contentItem: Text {
+                                text: obsButton.text
+                                color: window.text
+                                font.pixelSize: 11
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                        }
+
+                        Text {
+                            Layout.fillWidth: true
+                            visible: appController.obsNotice.length > 0
+                            text: appController.obsNotice
+                            color: "#e0c07e"
+                            font.pixelSize: 9
+                            wrapMode: Text.WordWrap
+                            elide: Text.ElideRight
+                            maximumLineCount: 2
+                        }
+                    }
+                }
+            }
+
+            Panel {
+                Layout.preferredWidth: 330
+                Layout.preferredHeight: 118
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: 18
                     spacing: 8
                     RowLayout {
                         LabelSmall { text: "FLASHBACK BUFFER" }

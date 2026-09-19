@@ -35,6 +35,23 @@ QString extractPciAddress(const QString &path) {
 
 } // namespace
 
+QString DeviceDiscovery::obsLoopbackDevice() {
+    const QDir sys(QStringLiteral("/sys/class/video4linux"));
+    const auto wanted = QString::fromLatin1(ObsLoopbackLabel).toLower();
+    for (const auto &entry : sys.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name)) {
+        // v4l2loopback publishes its card_label as the device name, which is what the installer
+        // sets and what tells this node apart from the capture card.
+        if (readTrimmed(sys.filePath(entry) + QStringLiteral("/name")) != wanted) {
+            continue;
+        }
+        const auto node = QStringLiteral("/dev/") + entry;
+        if (QFileInfo::exists(node)) {
+            return node;
+        }
+    }
+    return {};
+}
+
 bool DeviceDiscovery::cardPresent(QString *pciAddress) {
     const QDir pci(QStringLiteral("/sys/bus/pci/devices"));
     for (const auto &entry : pci.entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {

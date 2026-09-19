@@ -31,6 +31,23 @@ struct PipelineConfig {
     QString micTarget;
     bool captureGameAudio = true;
     bool captureMic = true;
+
+    /*!
+     * Routing to OBS, which cannot open the capture card itself while quadcap holds it.
+     *
+     * Video goes to a v4l2loopback node OBS adds as a camera. Audio goes to one sink per source
+     * rather than a single mixed one, so game and microphone arrive in OBS as separate inputs that
+     * can be levelled, ducked and filtered independently.
+     */
+    bool enableObsOutput = false;
+    //! v4l2loopback node, e.g. "/dev/video10". Empty leaves the video leg out.
+    QString obsVideoDevice;
+    //! PipeWire sink carrying console audio. OBS captures its monitor. Empty leaves it out.
+    QString obsGameSink;
+    QString obsMicSink;
+    //! Geometry sent to OBS. Zero matches the capture size.
+    int obsWidth = 0;
+    int obsHeight = 0;
 };
 
 /*!
@@ -72,6 +89,12 @@ class CapturePipeline final : public QObject {
     //! Why an audio source was left out, for the UI to show. Empty when everything was captured.
     [[nodiscard]] QString audioNotice() const;
 
+    //! Why the OBS route is not carrying everything. Empty when it is, or when it is switched off.
+    [[nodiscard]] QString obsNotice() const;
+
+    //! True when at least one OBS output is live.
+    [[nodiscard]] bool obsActive() const;
+
     void setAudioGainDb(const QString &source, double decibels);
     void setAudioMuted(const QString &source, bool muted);
 
@@ -83,6 +106,15 @@ class CapturePipeline final : public QObject {
      * taking the whole pipeline — and the video with it — down at PLAYING.
      */
     [[nodiscard]] static bool canOpenSource(GstElement *element);
+
+    /*!
+     * True when an audio sink with this exact name is present.
+     *
+     * Needed because pulsesink does not fail on a name that does not exist: it quietly falls back
+     * to the default sink. Left unchecked, switching on the OBS route would send console audio to
+     * the speakers instead, with OBS receiving nothing and no error to explain either half.
+     */
+    [[nodiscard]] static bool audioSinkExists(const QString &name);
 
   signals:
     void errorOccurred(const QString &message);
@@ -117,6 +149,20 @@ class CapturePipeline final : public QObject {
     //! One source chain: convert, resample, drift-correct, then tee. Null when it cannot be built.
     [[nodiscard]] GstElement *buildAudioSource(GstElement *source, const char *label);
 
+    /*!
+     * Hangs the OBS video branch off the raw tee.
+     *
+     * Never fatal. A missing loopback node means the module is not installed, which is a reason to
+     * tell someone rather than to refuse to capture.
+     */
+    void buildObsVideo(GstElement *rawTee);
+
+    //! Sends one audio source to its own OBS sink. Never fatal, for the same reason.
+    void attachObsAudio(GstElement *tee, const QString &sink, const char *label);
+
+    //! Adds \a note to obsNotice_, keeping any note already there.
+    void noteObsProblem(const QString &note);
+
     [[nodiscard]] GstElement *make(const char *factory, const char *name, QString *error) const;
     void destroyPipeline();
     void destroyRecordingBranch();
@@ -138,6 +184,9 @@ class CapturePipeline final : public QObject {
     GstPad *recordTeePad_ = nullptr;
     QVector<AudioTrack> audioTracks_;
     QString audioNotice_;
+    QString obsNotice_;
+    bool obsVideoLive_ = false;
+    int obsAudioLive_ = 0;
     QHash<QString, GstElement *> mixGain_;
     GstElement *monitorGain_ = nullptr;
     QHash<QString, double> pendingGainDb_;

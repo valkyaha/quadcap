@@ -242,6 +242,43 @@ EOF
   fi
 }
 
+# Everything OBS needs to read quadcap: a loopback camera for the picture and one sink per audio
+# source. Optional — a machine that will never stream should not be made to carry a kernel module —
+# so a failure here warns and moves on rather than stopping the install.
+install_obs_bridge() {
+  if ! command -v apt-get >/dev/null 2>&1; then
+    warn "Not a Debian-based system; skipping the OBS bridge"
+    return 0
+  fi
+
+  info "Installing the OBS bridge"
+  if ! apt-get install -y v4l2loopback-dkms >/dev/null 2>&1; then
+    warn "Could not install v4l2loopback-dkms; OBS video output will be unavailable"
+  else
+    install -Dm0644 "${PROJECT_DIR}/packaging/quadcap-v4l2loopback.conf" \
+      /etc/modprobe.d/quadcap-v4l2loopback.conf
+    echo v4l2loopback >/etc/modules-load.d/quadcap-v4l2loopback.conf
+    # Reloaded rather than just loaded, so a module already up with different options picks up
+    # the card_label quadcap looks for instead of staying on whatever it was given before.
+    modprobe -r v4l2loopback 2>/dev/null || true
+    if modprobe v4l2loopback 2>/dev/null; then
+      ok "Virtual camera ready; OBS will list it as \"quadcap\""
+    else
+      warn "v4l2loopback did not load; it should come up on the next boot"
+    fi
+  fi
+
+  # PipeWire reads drop-ins from here at session start, so the two sinks exist before quadcap runs
+  # and persist across reboots.
+  if [[ -d /etc/pipewire ]]; then
+    install -Dm0644 "${PROJECT_DIR}/packaging/pipewire/quadcap-obs-sinks.conf" \
+      /etc/pipewire/pipewire.conf.d/quadcap-obs-sinks.conf
+    ok "OBS audio sinks installed; log out and back in for them to appear"
+  else
+    warn "PipeWire not found; OBS audio output will be unavailable"
+  fi
+}
+
 add_to_video_group() {
   [[ -n "${TARGET_USER}" ]] || return 0
   if [[ " $(id -nG "${TARGET_USER}") " == *" video "* ]]; then
@@ -308,6 +345,7 @@ main() {
   configure_module
   handle_secure_boot
   install_edid_service
+  install_obs_bridge
   add_to_video_group
   install_app
 

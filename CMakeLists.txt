@@ -122,6 +122,9 @@ install(FILES packaging/quadcap.svg DESTINATION share/icons/hicolor/scalable/app
 install(PROGRAMS packaging/install.sh packaging/uninstall.sh DESTINATION share/quadcap)
 install(FILES INSTALL.md packaging/quadcap-edid.service DESTINATION share/quadcap)
 install(DIRECTORY packaging/edid DESTINATION share/quadcap)
+# Reference copies. install.sh puts them in /etc, which a package must not write to directly.
+install(FILES packaging/quadcap-v4l2loopback.conf DESTINATION share/quadcap)
+install(FILES packaging/pipewire/quadcap-obs-sinks.conf DESTINATION share/quadcap)
 
 # Shared by the changelog trailer below and by the package metadata further down, which is set
 # after these install rules and so cannot be read from here.
@@ -207,5 +210,6 @@ set(CPACK_DEBIAN_PACKAGE_DEPENDS
 qml6-module-qtquick-controls, qml6-module-qtquick-layouts, qml6-module-qtquick-templates, \
 qml6-module-qtquick-window, gstreamer1.0-plugins-base, gstreamer1.0-plugins-good, \
 gstreamer1.0-plugins-bad, gstreamer1.0-alsa, gstreamer1.0-gl, gstreamer1.0-qt6")
-set(CPACK_DEBIAN_PACKAGE_RECOMMENDS "dkms, gstreamer1.0-pipewire, gstreamer1.0-plugins-ugly")
+set(CPACK_DEBIAN_PACKAGE_RECOMMENDS
+    "dkms, gstreamer1.0-pipewire, gstreamer1.0-plugins-ugly, v4l2loopback-dkms, pipewire-pulse")
 include(CPack)
