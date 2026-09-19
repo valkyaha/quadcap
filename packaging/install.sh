@@ -268,20 +268,28 @@ install_app() {
         gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly \
         gstreamer1.0-pipewire gstreamer1.0-qt6
     fi
-    info "Installing the prebuilt application"
-    install -Dm0755 "${prebuilt_dir}/quadcap" /usr/local/bin/quadcap
-    install -Dm0755 "${prebuilt_dir}/quadcapd" /usr/local/bin/quadcapd
-    install -Dm0644 "${PROJECT_DIR}/packaging/quadcap.desktop" \
-      /usr/local/share/applications/quadcap.desktop
-    install -Dm0644 "${PROJECT_DIR}/packaging/quadcap.svg" \
-      /usr/local/share/icons/hicolor/scalable/apps/quadcap.svg
-    install -Dm0755 "${PROJECT_DIR}/packaging/uninstall.sh" \
-      /usr/local/share/quadcap/uninstall.sh
-    install -Dm0644 "${PROJECT_DIR}/INSTALL.md" /usr/local/share/quadcap/INSTALL.md
-    install -d /usr/local/share/quadcap/edid
-    install -m0644 "${PROJECT_DIR}"/packaging/edid/* /usr/local/share/quadcap/edid/
-    ok "Installed quadcap and quadcapd into /usr/local/bin"
-    return
+    # The bundled binaries are built on Ubuntu 24.04. On a distribution with a
+    # different glibc or Qt 6 minor they will not load, and installing them
+    # regardless would leave behind a command that cannot start. Asking one of
+    # them to print its usage exercises the whole link before anything is
+    # copied, so the source build below catches the cases the bundle misses.
+    if QT_QPA_PLATFORM=offscreen "${prebuilt_dir}/quadcapd" --help >/dev/null 2>&1; then
+      info "Installing the prebuilt application"
+      install -Dm0755 "${prebuilt_dir}/quadcap" /usr/local/bin/quadcap
+      install -Dm0755 "${prebuilt_dir}/quadcapd" /usr/local/bin/quadcapd
+      install -Dm0644 "${PROJECT_DIR}/packaging/quadcap.desktop" \
+        /usr/local/share/applications/quadcap.desktop
+      install -Dm0644 "${PROJECT_DIR}/packaging/quadcap.svg" \
+        /usr/local/share/icons/hicolor/scalable/apps/quadcap.svg
+      install -Dm0755 "${PROJECT_DIR}/packaging/uninstall.sh" \
+        /usr/local/share/quadcap/uninstall.sh
+      install -Dm0644 "${PROJECT_DIR}/INSTALL.md" /usr/local/share/quadcap/INSTALL.md
+      install -d /usr/local/share/quadcap/edid
+      install -m0644 "${PROJECT_DIR}"/packaging/edid/* /usr/local/share/quadcap/edid/
+      ok "Installed quadcap and quadcapd into /usr/local/bin"
+      return
+    fi
+    warn "The bundled binaries do not run here; falling back to a build from source"
   fi
   if [[ ! -x "${build_dir}/quadcap" ]]; then
     warn "No built application at ${build_dir}/quadcap; skipping app install"
