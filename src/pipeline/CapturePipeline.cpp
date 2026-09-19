@@ -678,13 +678,22 @@ bool CapturePipeline::canOpenSource(GstElement *element) {
     if (!element) {
         return false;
     }
-    // READY is where a capture element actually claims its device, so this is the cheapest point at
-    // which "busy" or "missing" becomes visible. Returned to NULL either way so the caller is free
-    // to wire it in or throw it away.
-    const auto result = gst_element_set_state(element, GST_STATE_READY);
-    const bool opened = result != GST_STATE_CHANGE_FAILURE;
-    gst_element_set_state(element, GST_STATE_NULL);
-    return opened;
+    // READY is where a capture element actually claims its device, so it is the cheapest point at
+    // which "busy" or "missing" becomes visible, and the element is returned to NULL either way so
+    // the caller is free to wire it in or throw it away.
+    //
+    // Tried twice because a sound device released moments ago by the graph being replaced can
+    // still refuse the next open, which left a rebuilt pipeline silent until something else
+    // prompted another attempt.
+    for (int attempt = 0; attempt < 2; ++attempt) {
+        if (gst_element_set_state(element, GST_STATE_READY) != GST_STATE_CHANGE_FAILURE) {
+            gst_element_set_state(element, GST_STATE_NULL);
+            return true;
+        }
+        gst_element_set_state(element, GST_STATE_NULL);
+        g_usleep(150 * 1000);
+    }
+    return false;
 }
 
 QString CapturePipeline::audioNotice() const {
@@ -1178,6 +1187,18 @@ GstElement *CapturePipeline::make(const char *factory, const char *name, QString
 void CapturePipeline::destroyPipeline() {
     if (!pipeline_) {
         return;
+    }
+    /*
+     * Detach the preview before anything is freed.
+     *
+     * qml6glsink and the QML video item hold each other, and the item is drawn on Qt's render
+     * thread, which knows nothing about this one. Unreffing the pipeline frees the sink under a
+     * renderer that is still pointing at it, and the crash that follows is a jump through whatever
+     * happens to be in freed memory. Rebuilding the graph is exactly when this happens, which is
+     * why Refresh could take the window with it.
+     */
+    if (previewSink_ && g_object_class_find_property(G_OBJECT_GET_CLASS(previewSink_), "widget")) {
+        g_object_set(previewSink_, "widget", nullptr, nullptr);
     }
     gst_element_set_state(pipeline_, GST_STATE_NULL);
     gst_object_unref(pipeline_);

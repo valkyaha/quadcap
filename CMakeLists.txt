@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(quadcap VERSION 0.3.5 LANGUAGES CXX)
+project(quadcap VERSION 0.3.6 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
