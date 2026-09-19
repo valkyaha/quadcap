@@ -8,6 +8,7 @@
 #include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
+#include <QMetaObject>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QStorageInfo>
@@ -325,13 +326,28 @@ void AppController::setObsEnabled(const bool enabled) {
     }
     obsEnabled_ = enabled;
     QSettings().setValue(QStringLiteral("obs/enabled"), obsEnabled_);
-    applyObsOutput();
     emit obsChanged();
-    // The branches are part of the graph, so the route can only change by building it again.
-    if (pipeline_.isRunning() && !pipeline_.isRecording()) {
-        pipeline_.stop();
-        startPipeline();
-    }
+
+    /*
+     * Everything below happens on the next turn of the event loop rather than in this handler.
+     *
+     * Switching the route means rebuilding the capture graph, and taking a graph down from inside
+     * a UI handler deadlocks the window: pipewiresrc takes the PipeWire thread-loop lock on its
+     * way to NULL, and that loop is waiting on the main loop the handler is blocking. It is the
+     * same trap that a fatal error used to fall into, and the button reached it by a different
+     * road.
+     */
+    QMetaObject::invokeMethod(
+        this,
+        [this] {
+            applyObsOutput();
+            // The branches are part of the graph, so the route can only change by rebuilding it.
+            if (pipeline_.isRunning() && !pipeline_.isRecording()) {
+                pipeline_.stop();
+                startPipeline();
+            }
+        },
+        Qt::QueuedConnection);
 }
 
 double AppController::gameGainDb() const {

@@ -144,6 +144,10 @@ void CapturePipeline::stop() {
     if (!pipeline_) {
         return;
     }
+    // Only a recording needs the graph drained before it goes away; the ring's own tail is
+    // already treated as unsettled by the reader. Waiting seconds for an EOS that nothing is
+    // waiting on would just be a frozen window.
+    const bool wasRecording = recordQueue_ != nullptr;
     if (recordQueue_) {
         if (recordTeePad_) {
             GstPad *queueSink = gst_element_get_static_pad(recordQueue_, "sink");
@@ -158,7 +162,8 @@ void CapturePipeline::stop() {
     gst_element_send_event(pipeline_, gst_event_new_eos());
     GstBus *bus = gst_element_get_bus(pipeline_);
     GstMessage *terminal = gst_bus_timed_pop_filtered(
-        bus, 5 * GST_SECOND, static_cast<GstMessageType>(GST_MESSAGE_EOS | GST_MESSAGE_ERROR));
+        bus, wasRecording ? 5 * GST_SECOND : 500 * GST_MSECOND,
+        static_cast<GstMessageType>(GST_MESSAGE_EOS | GST_MESSAGE_ERROR));
     gst_clear_message(&terminal);
     gst_object_unref(bus);
     destroyPipeline();
