@@ -1,0 +1,25 @@
+[Unit]
+Description=Apply the configured EDID to the quadcap capture card
+Documentation=file:/usr/local/share/quadcap/edid/README.md
+After=systemd-modules-load.service
+Wants=systemd-modules-load.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+
+# The EDID the card presents decides what mode the console outputs, and therefore whether the
+# passthrough display can sync to it. On the 4K60 Pro MK.2 the image written through the MCU is
+# VOLATILE — it is gone after a power cycle and the card comes back advertising 4K60 HDR — so it has
+# to be reapplied on every boot. Set QUADCAP_EDID_IMAGE in /etc/quadcap/edid.conf; leaving it empty
+# keeps the card's factory EDID.
+EnvironmentFile=-/etc/quadcap/edid.conf
+ExecStart=/bin/sh -c '[ -n "${QUADCAP_EDID_IMAGE:-}" ] || { echo "no EDID image configured; leaving the factory EDID"; exit 0; }; exec quadcapd --set-edid "${QUADCAP_EDID_IMAGE}"'
+
+# The V4L2 node can appear a moment after the module loads.
+Restart=on-failure
+RestartSec=2
+StartLimitBurst=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,16 @@
+# Build output
+/build/
+/build-*/
+
+# The sc0710 driver is a separate upstream project, not vendored source. It is pinned by commit in
+# third_party/sc0710.pin and cloned by packaging/install.sh when missing.
+/third_party/sc0710/
+
+# Editor and OS cruft
+*.user
+*.swp
+*~
+.cache/
+compile_commands.json
+.vscode/
+.idea/

@@ -1,0 +1,28 @@
+diff --git a/lib/sc0710-video.c b/lib/sc0710-video.c
+index da6c578..04e5e5c 100644
+--- a/lib/sc0710-video.c
++++ b/lib/sc0710-video.c
+@@ -896,6 +896,23 @@ static struct sc0710_format formats[] =
+ 	/* Alternate 4K timings with larger blanking */
+ 	{ 5500, 2250, 3840, 2160, 0, 4800, 48000, 1000, 8, 0, "3840x2160p48",    V4L2_DV_BT_CEA_3840X2160P60 },
+ 
++	/*
++	 * UHD sources that use the 4400x2250 totals at 24/25/50 Hz.
++	 *
++	 * A PlayStation 5 does this when it drops to 24 Hz for 24p content. Only the DCI entries
++	 * below carried those rates against 4400x2250, so the matcher's exact-FPS short circuit
++	 * returned a 4096-wide format for a 3840-wide signal. sc0710_framesize() then sized the
++	 * frame from fmt->width, so V4L2 advertised a 4096 stride while the DMA kept writing
++	 * tightly packed 3840-wide lines, and every consumer decoded a sheared, repeating image.
++	 *
++	 * These must stay ahead of the DCI block: the matcher returns on the first diff == 0 it
++	 * finds, so whichever entry comes first wins. That makes genuine DCI 4K at these rates
++	 * undetectable, which is the right trade — consumer HDMI sources send 3840, not 4096.
++	 */
++	{ 4400, 2250, 3840, 2160, 0, 2400, 24000, 1000, 8, 0, "3840x2160p24alt", V4L2_DV_BT_CEA_3840X2160P24 },
++	{ 4400, 2250, 3840, 2160, 0, 2500, 25000, 1000, 8, 0, "3840x2160p25alt", V4L2_DV_BT_CEA_3840X2160P25 },
++	{ 4400, 2250, 3840, 2160, 0, 5000, 50000, 1000, 8, 0, "3840x2160p50alt", V4L2_DV_BT_CEA_3840X2160P50 },
++
+ 	/* 4096x2160 - DCI 4K */
+ 	{ 4400, 2250, 4096, 2160, 0, 2400, 24000, 1000, 8, 0, "4096x2160p24",    V4L2_DV_BT_CEA_3840X2160P24 },
+ 	{ 4400, 2250, 4096, 2160, 0, 2500, 25000, 1000, 8, 0, "4096x2160p25",    V4L2_DV_BT_CEA_3840X2160P25 },

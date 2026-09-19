@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=quadcap
+GenericName=Game Capture
+Comment=Capture and record a games console through a PCIe capture card
+Exec=quadcap
+Icon=quadcap
+Terminal=false
+Categories=AudioVideo;Video;Recorder;
+Keywords=capture;record;console;hdmi;gameplay;
+StartupNotify=true
