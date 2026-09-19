@@ -82,6 +82,8 @@ export OUTPUT="${OUTPUT_DIR}/quadcap-${VERSION}-x86_64.AppImage"
 # The runners this is built on have no FUSE, so the tool AppImages have to unpack themselves.
 export APPIMAGE_EXTRACT_AND_RUN=1
 
+# First pass populates the AppDir. The AppImage itself is produced by the second pass, because a
+# plugin directory has to be placed in between.
 "${TOOL_DIR}/linuxdeploy" \
   --appdir "${APPDIR}" \
   --executable "${APPDIR}/usr/bin/quadcap" \
@@ -89,9 +91,66 @@ export APPIMAGE_EXTRACT_AND_RUN=1
   --desktop-file "${APPDIR}/usr/share/applications/quadcap.desktop" \
   --icon-file "${APPDIR}/usr/share/icons/hicolor/scalable/apps/quadcap.svg" \
   --plugin qt \
-  --plugin gstreamer \
+  --plugin gstreamer
+
+# linuxdeploy-plugin-qt takes wayland-decoration-client and wayland-shell-integration from
+# EXTRA_QT_PLUGINS but silently passes over wayland-graphics-integration-client, which is the one
+# holding the EGL client buffer integration. Without it Qt reports "Failed to load client buffer
+# integration: wayland-egl" and never gets a GL surface, so it is copied in by hand and linuxdeploy
+# is asked to resolve what it links against.
+GRAPHICS_INTEGRATION="${QT_PLUGIN_DIR}/wayland-graphics-integration-client"
+if [[ -d "${GRAPHICS_INTEGRATION}" ]]; then
+  mkdir -p "${APPDIR}/usr/plugins"
+  cp -r "${GRAPHICS_INTEGRATION}" "${APPDIR}/usr/plugins/"
+fi
+
+"${TOOL_DIR}/linuxdeploy" \
+  --appdir "${APPDIR}" \
+  --deploy-deps-only "${APPDIR}/usr/plugins/wayland-graphics-integration-client" \
   --output appimage
 
 [[ -f "${OUTPUT}" ]] || { echo "no AppImage was produced" >&2; exit 1; }
+
+# Everything the capture graph builds itself out of. A missing plugin does not fail the deployment,
+# it fails the app at the moment someone tries to use it, so the bundle is checked against the list
+# here instead. glupload in particular lives in gstreamer1.0-gl rather than plugins-base, which is
+# easy to leave off a build host and impossible to notice from a successful build.
+REQUIRED_PLUGINS=(
+  libgstcoreelements   # queue, tee
+  libgstvideo4linux2   # v4l2src
+  libgstopengl         # glupload, glcolorconvert
+  libgstqml6           # qml6glsink
+  libgstnvcodec        # nvh265enc
+  libgstvideoparsersbad # h265parse
+  libgstmatroska       # matroskamux
+  libgstmultifile      # splitmuxsink, splitmuxsrc
+  libgstvideorate
+  libgstalsa
+  libgstpipewire
+  libgstaudioconvert
+  libgstaudioresample
+  libgstaudiorate
+  libgstaudiomixer
+  libgstvolume
+  libgstlevel
+)
+missing=()
+for plugin in "${REQUIRED_PLUGINS[@]}"; do
+  if [[ ! -f "${APPDIR}/usr/lib/gstreamer-1.0/${plugin}.so" ]]; then
+    missing+=("${plugin}")
+  fi
+done
+# Qt loads the Wayland buffer integration from here; without it a Wayland session cannot get a GL
+# surface and the window never comes up.
+if [[ ! -d "${APPDIR}/usr/plugins/wayland-graphics-integration-client" ]]; then
+  missing+=(wayland-graphics-integration-client)
+fi
+if [[ ${#missing[@]} -gt 0 ]]; then
+  rm -f "${OUTPUT}"
+  echo "the AppImage is missing: ${missing[*]}" >&2
+  echo "install the packages providing them on the build host and try again" >&2
+  exit 1
+fi
+
 cd "${OUTPUT_DIR}"
 sha256sum "$(basename "${OUTPUT}")" >"$(basename "${OUTPUT}").sha256"
