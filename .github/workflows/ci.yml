@@ -41,7 +41,14 @@ jobs:
       - name: Check formatting
         run: find src tests -type f \( -name '*.cpp' -o -name '*.h' \) -print0 | xargs -0 clang-format --dry-run --Werror
       - name: Check shell scripts
-        run: shellcheck -S warning packaging/*.sh
+        run: |
+          shellcheck -S warning packaging/*.sh
+          # core.filemode is off on some working trees, so a non-executable mode
+          # can be committed unnoticed until an install fails with exit 126.
+          if git ls-files -s packaging/*.sh | grep -v '^100755 '; then
+            echo "the packaging scripts above are not executable in the index" >&2
+            exit 1
+          fi
       - name: Static analysis
         run: |
           cppcheck --error-exitcode=1 --enable=warning,performance,portability \
