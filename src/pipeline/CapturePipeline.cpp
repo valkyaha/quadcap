@@ -163,6 +163,21 @@ void CapturePipeline::stop() {
     destroyPipeline();
 }
 
+/*!
+ * Attaches a recording branch to the running graph without interrupting it.
+ *
+ * Recording reuses the encoder that is already feeding the flashback ring rather than starting a
+ * second one, because encoding 4K60 twice is not something the card and the GPU have headroom for.
+ * The branch is therefore built live and hung off the encoded tee: a queue, a muxer, and a sink,
+ * plus one queue per audio track bound to a mux audio pad, all of it added to a pipeline that is
+ * already PLAYING and then synced to its state.
+ *
+ * Every failure path calls destroyRecordingBranch before returning, since a half-linked branch left
+ * on a live pipeline would stall the ring the preview depends on.
+ *
+ * The last step asks the encoder for a keyframe. Without it the file opens on a P-frame referring
+ * to a picture that was never written, and the first second is unplayable.
+ */
 bool CapturePipeline::startRecording(const QString &path, QString *error) {
     if (!pipeline_ || !encodedTee_) {
         if (error) {
@@ -207,11 +222,13 @@ bool CapturePipeline::startRecording(const QString &path, QString *error) {
     }
 
     recordTeePad_ = gst_element_request_pad_simple(encodedTee_, "src_%u");
-    GstPad *queueSink = gst_element_get_static_pad(recordQueue_, "sink");
-    const bool linked =
-        recordTeePad_ && queueSink && gst_pad_link(recordTeePad_, queueSink) == GST_PAD_LINK_OK;
-    if (queueSink) {
-        gst_object_unref(queueSink);
+    // Named for the branch it belongs to: the audio loop below binds a pad of its own per track,
+    // and two things called queueSink in one function is a good way to unref the wrong one.
+    GstPad *videoQueueSink = gst_element_get_static_pad(recordQueue_, "sink");
+    const bool linked = recordTeePad_ && videoQueueSink &&
+                        gst_pad_link(recordTeePad_, videoQueueSink) == GST_PAD_LINK_OK;
+    if (videoQueueSink) {
+        gst_object_unref(videoQueueSink);
     }
     if (!linked) {
         if (error) {

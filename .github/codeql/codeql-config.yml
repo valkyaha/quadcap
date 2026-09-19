@@ -1,0 +1,10 @@
+name: quadcap
+
+# Qt generates moc_*.cpp from the Q_OBJECT macros and drops it in the build tree. It is machine
+# written, it is not in version control, and its shape is not ours to change, so the maintainability
+# queries have nothing actionable to say about it. Excluding the build directories leaves the scan
+# reporting on code that can actually be edited.
+paths-ignore:
+  - build
+  - build-*
+  - third_party

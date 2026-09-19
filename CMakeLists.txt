@@ -112,6 +112,10 @@ endif()
 set(CMAKE_INSTALL_DEFAULT_DIRECTORY_PERMISSIONS
     OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
 
+# quadcapd --version was a literal that stopped being true the first time the project version
+# moved. It is taken from the project now so it cannot drift again.
+target_compile_definitions(quadcapd PRIVATE QUADCAP_VERSION="${PROJECT_VERSION}")
+
 install(TARGETS quadcap quadcapd RUNTIME DESTINATION bin)
 install(FILES packaging/quadcap.desktop DESTINATION share/applications)
 install(FILES packaging/quadcap.svg DESTINATION share/icons/hicolor/scalable/apps)

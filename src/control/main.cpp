@@ -163,10 +163,24 @@ int recordForSeconds(const DeviceStatus &status, const QString &path, const int 
 
 } // namespace
 
+/*!
+ * quadcapd is the headless half of quadcap: everything the window can tell you about the card,
+ * available over SSH and usable from a script.
+ *
+ * The options fall into four groups. --status, --watch, and --json report what the card sees, and
+ * are the ones worth reaching for when a console shows no picture. --get-edid, --set-edid, and
+ * --edid-source control what the card advertises to the console, which is how a source is talked
+ * out of a mode the display chain cannot carry. --setup reports what is stopping capture on this
+ * machine, a driver that is absent, unloaded, or unsigned. --record captures to a file, shaped by
+ * --seconds, --width, --height, --fps, and --software.
+ *
+ * Each group returns as soon as it has done its work, so the ordering below is what decides which
+ * option wins when several are passed together.
+ */
 int main(int argc, char **argv) {
     QCoreApplication app(argc, argv);
     QCoreApplication::setApplicationName(QStringLiteral("quadcapd"));
-    QCoreApplication::setApplicationVersion(QStringLiteral("0.1.0"));
+    QCoreApplication::setApplicationVersion(QStringLiteral(QUADCAP_VERSION));
 
     QCommandLineParser parser;
     parser.setApplicationDescription(
@@ -204,6 +218,8 @@ int main(int argc, char **argv) {
         {QStringLiteral("software"), QStringLiteral("Use the software encoder and CPU scaling")});
     parser.process(app);
 
+    // Probed once up front: every branch below needs to know whether a card is present, and each
+    // probe walks sysfs and opens the V4L2 node.
     CaptureDevice device;
     const auto initial = device.probe();
     const bool json = parser.isSet(QStringLiteral("json"));
