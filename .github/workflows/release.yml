@@ -156,11 +156,26 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ inputs.version }}
           COMMIT: ${{ github.sha }}
-        run: >-
-          gh release create "v${VERSION}"
-          "dist/quadcap-${VERSION}-linux-x86_64.tar.xz"
-          "dist/quadcap-${VERSION}-linux-x86_64.tar.xz.sha256"
-          --repo "${GITHUB_REPOSITORY}"
-          --target "${COMMIT}"
-          --title "quadcap ${VERSION}"
-          --notes-file dist/RELEASE_NOTES.md
+        # A draft left over from an earlier attempt holds the tag name without
+        # holding the tag, so creating would fail. Adopting it instead keeps a
+        # rerun of this job harmless: the assets are replaced, not duplicated.
+        run: |
+          archive="dist/quadcap-${VERSION}-linux-x86_64.tar.xz"
+          if gh release view "v${VERSION}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release edit "v${VERSION}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --target "${COMMIT}" \
+              --title "quadcap ${VERSION}" \
+              --notes-file dist/RELEASE_NOTES.md \
+              --draft=false
+            gh release upload "v${VERSION}" \
+              "${archive}" "${archive}.sha256" \
+              --repo "${GITHUB_REPOSITORY}" --clobber
+          else
+            gh release create "v${VERSION}" \
+              "${archive}" "${archive}.sha256" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --target "${COMMIT}" \
+              --title "quadcap ${VERSION}" \
+              --notes-file dist/RELEASE_NOTES.md
+          fi
