@@ -1,8 +1,9 @@
 # quadcap
 
-**4K60 game capture and recording for Linux.** Native capture, recording and instant replay for PCIe
-HDMI capture cards — Elgato 4K60 Pro MK.2, 4K Pro and Cam Link Pro — on a platform their vendor
-software never shipped for.
+**Elgato game capture for Linux.** quadcap records 4K60 console gameplay from an Elgato PCIe HDMI
+capture card — the 4K60 Pro MK.2, 4K Pro or Cam Link Pro — on a platform Elgato never shipped
+software for. Hardware HDMI passthrough to your monitor, instant replay, separate game and
+microphone tracks, and a virtual camera for OBS Studio.
 
 [![Release](https://img.shields.io/github/v/release/valkyaha/quadcap?sort=semver)](https://github.com/valkyaha/quadcap/releases)
 [![Downloads](https://img.shields.io/github/downloads/valkyaha/quadcap/total?label=downloads)](https://github.com/valkyaha/quadcap/releases)
@@ -202,6 +203,54 @@ card's registers instead, and is set by the installer.
 
 The card's ALSA node is exclusive, so only one capturing process at a time. The desktop app refuses
 to start a second copy and raises the existing window instead; check for a stray `quadcapd` too.
+
+## Frequently asked questions
+
+### Does the Elgato 4K60 Pro work on Linux?
+
+Yes. Elgato ships no Linux software and no Linux driver, but the card is driven by the open-source
+[`sc0710`](https://github.com/Nakildias/sc0710) kernel module, and quadcap is the application on top
+of it. `packaging/install.sh` installs both. Development and testing were done on a 4K60 Pro MK.2.
+
+### Is there an Elgato Game Capture HD alternative for Linux?
+
+quadcap is that application for the supported PCIe cards: preview, recording, instant replay and an
+audio mixer. It does not support Elgato's USB devices — see below.
+
+### Which Elgato capture cards are supported?
+
+The three PCIe cards in [Supported hardware](#supported-hardware): 4K60 Pro MK.2, 4K Pro and
+Cam Link Pro, all of which are `12ab:0710` boards. USB devices — HD60 S, HD60 X, Cam Link 4K and the
+original Game Capture HD — use entirely different hardware and are **not** supported by this project.
+
+### How do I use an Elgato capture card with OBS Studio on Linux?
+
+OBS cannot open the card while quadcap is using it, so quadcap passes the signal on instead: the
+picture through a virtual camera and each audio source through its own sink. See
+[Streaming to OBS](#streaming-to-obs). quadcap can also write the OBS scene for you.
+
+### Does HDMI passthrough add latency to the game?
+
+No. Passthrough is done in the card's hardware and does not pass through the PC, so the display
+attached to the card's HDMI output is unaffected by what the software is doing — or by whether the
+PC is even running quadcap.
+
+### Does it work with Secure Boot enabled?
+
+Yes. The driver is installed through DKMS and signed with the machine's own MOK key, so it rebuilds
+on kernel upgrades and still loads with Secure Boot on. The installer walks through enrolling the
+key, which needs a reboot and a password you set. See [INSTALL.md](INSTALL.md).
+
+### What about HDR?
+
+The card tone-maps HDR to SDR for capture on its own MCU, which is what keeps 4K60 at full frame
+rate. If a console picks a mode the rest of your chain cannot carry, quadcap can change the EDID the
+card advertises so it negotiates something else — see [Troubleshooting](#troubleshooting).
+
+### Do I need an NVIDIA GPU?
+
+For 4K60, in practice yes: recording uses NVENC. Software encoding works and is selectable with
+`--software`, but will not keep up at 4K60 on most machines.
 
 ## Contributing
 
