@@ -130,7 +130,8 @@ sudo apt install cmake ninja-build qt6-base-dev qt6-declarative-dev \
   qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts \
   qml6-module-qtquick-templates qml6-module-qtquick-window \
   libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
-  gstreamer1.0-alsa gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-qt6 \
+  gstreamer1.0-alsa gstreamer1.0-gl gstreamer1.0-plugins-base \
+  gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-qt6 \
   gstreamer1.0-pipewire v4l-utils
 ```
 

@@ -44,10 +44,13 @@ jobs:
           languages: c-cpp
           queries: security-extended,security-and-quality
           config-file: ./.github/codeql/codeql-config.yml
+      # Built outside the checkout on purpose. Qt writes moc_*.cpp into the build tree, and CodeQL
+      # traces the compiler, so anything generated under the repository is reported as if it were
+      # source someone could go and fix. paths-ignore does not keep it out for a compiled language.
       - name: Configure
-        run: cmake -S . -B build-codeql -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo
+        run: cmake -S . -B "${RUNNER_TEMP}/build-codeql" -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo
       - name: Compile
-        run: cmake --build build-codeql --parallel 2
+        run: cmake --build "${RUNNER_TEMP}/build-codeql" --parallel 2
       - uses: github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63
         with:
           category: /language:c-cpp

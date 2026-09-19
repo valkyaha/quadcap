@@ -264,8 +264,8 @@ install_app() {
         qml6-module-qtqml qml6-module-qtqml-models qml6-module-qtqml-workerscript \
         qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts \
         qml6-module-qtquick-templates qml6-module-qtquick-window \
-        gstreamer1.0-alsa gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
-        gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly \
+        gstreamer1.0-alsa gstreamer1.0-gl gstreamer1.0-plugins-base \
+        gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly \
         gstreamer1.0-pipewire gstreamer1.0-qt6
     fi
     # The bundled binaries are built on Ubuntu 24.04. On a distribution with a

@@ -6,7 +6,7 @@ software never shipped for.
 
 [![Release](https://img.shields.io/github/v/release/valkyaha/quadcap?sort=semver)](https://github.com/valkyaha/quadcap/releases)
 [![Downloads](https://img.shields.io/github/downloads/valkyaha/quadcap/total?label=downloads)](https://github.com/valkyaha/quadcap/releases)
-[![Latest downloads](https://img.shields.io/github/downloads/valkyaha/quadcap/latest/total?label=latest%20release)](https://github.com/valkyaha/quadcap/releases/latest)
+[![Latest downloads](https://img.shields.io/github/downloads/valkyaha/quadcap/latest/total?label=downloads%40latest)](https://github.com/valkyaha/quadcap/releases/latest)
 [![Stars](https://img.shields.io/github/stars/valkyaha/quadcap?style=flat)](https://github.com/valkyaha/quadcap/stargazers)
 [![Licence](https://img.shields.io/github/license/valkyaha/quadcap)](LICENSE)
 [![Issues](https://img.shields.io/github/issues/valkyaha/quadcap)](https://github.com/valkyaha/quadcap/issues)
@@ -50,14 +50,40 @@ driver, which quadcap installs and configures for you.
 
 ## Install
 
-Download the Linux bundle from the latest release, extract it, and run:
+Every [release](https://github.com/valkyaha/quadcap/releases/latest) ships three downloads. All of
+them still need the `sc0710` kernel driver, which only `packaging/install.sh` sets up — it handles
+DKMS so the module survives a kernel upgrade, and signs it so it loads under Secure Boot.
+
+**AppImage** — the portable option, with Qt and GStreamer bundled:
 
 ```bash
+chmod +x quadcap-*-x86_64.AppImage
+./quadcap-*-x86_64.AppImage
+```
+
+**Debian package** — for the Ubuntu release it was built against. quadcap links Qt's QML private
+ABI, so the package pins the exact Qt patch version and will refuse to install against another one.
+Use the AppImage or build from source on other releases:
+
+```bash
+sudo apt install ./quadcap_*_amd64-ubuntu24.04.deb
+```
+
+**Source bundle** — carries the source, the pinned driver, and prebuilt binaries:
+
+```bash
+tar -xf quadcap-*-linux-x86_64.tar.xz
+cd quadcap-*-linux-x86_64
 sudo ./packaging/install.sh
 ```
 
-The bundle includes prebuilt Ubuntu 24.04+ x86-64 binaries and the pinned driver source. To build
-from source instead:
+Each download has a `.sha256` beside it. Verify before installing:
+
+```bash
+sha256sum -c quadcap-*.sha256
+```
+
+To build from source instead:
 
 ```bash
 git clone https://github.com/valkyaha/quadcap.git
@@ -75,7 +101,8 @@ sudo apt install cmake ninja-build qt6-base-dev qt6-declarative-dev \
   qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts \
   qml6-module-qtquick-templates qml6-module-qtquick-window \
   libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
-  gstreamer1.0-alsa gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-qt6 \
+  gstreamer1.0-alsa gstreamer1.0-gl gstreamer1.0-plugins-base \
+  gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-qt6 \
   gstreamer1.0-pipewire v4l-utils
 ```
 
