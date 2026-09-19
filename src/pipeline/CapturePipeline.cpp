@@ -324,8 +324,8 @@ QString CapturePipeline::currentRecording() const {
 }
 
 void CapturePipeline::pollBus() {
-    if (!pipeline_) {
-        return;
+    if (!pipeline_ || tearingDown_) {
+        return; // Already failed; the graph goes away on the next turn of the event loop.
     }
     GstBus *bus = gst_element_get_bus(pipeline_);
     while (GstMessage *message = gst_bus_pop(bus)) {
@@ -334,10 +334,34 @@ void CapturePipeline::pollBus() {
             GError *error = nullptr;
             gchar *debug = nullptr;
             gst_message_parse_error(message, &error, &debug);
-            emit errorOccurred(gstErrorMessage(error, debug));
+            const auto text = gstErrorMessage(error, debug);
             g_clear_error(&error);
             g_free(debug);
-            break;
+            gst_message_unref(message);
+            gst_object_unref(bus);
+
+            /*
+             * A pipeline that has posted an error is finished, and leaving it allocated does real
+             * damage: it holds the capture device open, so the next attempt to start finds the
+             * card busy and blames another application, and after a few failures the process holds
+             * several descriptors on a node it can no longer use. isRunning() also keeps answering
+             * true for a graph that will never produce another frame.
+             *
+             * The teardown is deferred to the next turn of the event loop rather than done here.
+             * Changing a graph's state from inside its own bus handler deadlocks: pipewiresrc
+             * takes the PipeWire thread-loop lock on the way to NULL, and that loop is waiting on
+             * the main loop this handler is blocking.
+             */
+            tearingDown_ = true;
+            QMetaObject::invokeMethod(
+                this,
+                [this] {
+                    tearingDown_ = false;
+                    destroyPipeline();
+                },
+                Qt::QueuedConnection);
+            emit errorOccurred(text);
+            return;
         }
         case GST_MESSAGE_WARNING: {
             GError *error = nullptr;

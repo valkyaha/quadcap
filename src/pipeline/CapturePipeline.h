@@ -207,6 +207,8 @@ class CapturePipeline final : public QObject {
     QVector<GstPad *> recordAudioTeePads_;
     QString recordingPath_;
     bool recordingStopping_ = false;
+    //! Set between a fatal error and the deferred teardown, so the failure is reported once.
+    bool tearingDown_ = false;
     QTimer busTimer_;
 };
 
