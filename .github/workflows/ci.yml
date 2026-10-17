@@ -134,7 +134,7 @@ jobs:
         run: cmake -S . -B "${RUNNER_TEMP}/build-codeql" -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo
       - name: Compile
         run: cmake --build "${RUNNER_TEMP}/build-codeql" --parallel 2
-      - uses: github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63
+      - uses: github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d
         with:
           category: /language:c-cpp
 
