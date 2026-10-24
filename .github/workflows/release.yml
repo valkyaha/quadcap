@@ -39,7 +39,7 @@ jobs:
             qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts \
             qml6-module-qtquick-templates qml6-module-qtquick-window \
             libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
-      - uses: github/codeql-action/init@b96794f015dfd88f77b49b1c93e0fa7110f94c63
+      - uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370
         with:
           languages: c-cpp
           queries: security-extended,security-and-quality
